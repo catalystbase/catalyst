@@ -1,0 +1,1108 @@
+/* =========================================================
+   Catalyst — System Analysis Basic
+   Тёмный editorial. Одна непрерывная scroll-сцена.
+   ========================================================= */
+
+:root{
+  /* палитра */
+  --bg:            #0B0B0B;
+  --ink:           #FFFFFF;
+  --ink-dim:       #B4B4B4;
+  --ink-mute:      #6E6E6E;
+  --ink-soft:      #9A9A9A;   /* вторичный текст на первом экране */
+  --line:          #2A2A2A;
+  --accent:        #E2622F;   /* оранжевый из росчерка basic */
+
+  /* типографика */
+  --font: "Onest", "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ритм */
+  --pad: clamp(20px, 4vw, 64px);
+  --ease: cubic-bezier(.22,.61,.36,1);
+
+  /* размер логотипа в углу — уточняется скриптом */
+  --brand-w: 150px;
+  --brand-h: 72px;
+  /* буквы в логотипе начинаются на 17.39 % его ширины: по этой
+     вертикали выравнивается текст первой сцены */
+  --brand-inset: calc(var(--pad) + var(--brand-w) * .1739);
+  /* ширина текстовой колонки: одинакова слева и справа, поэтому
+     расстояние до маскота с обеих сторон совпадает */
+  --col: min(22vw, 470px);
+  /* базовая ширина переключателя темы */
+  --sw: clamp(54px, 4.4vw, 74px);
+  /* бегущий блик на границе двери */
+  --beam-a: #FFC7A6;
+  --beam-b: var(--accent);
+  --beam-glow:   rgba(255,150,102,.30);
+  --beam-glow-r: 14px;   /* высота светового ореола над линией */
+  /* спокойная ось у надписи «Все выпуски» */
+  --axis-line:     rgba(226,98,47,.42);
+}
+
+/* ---------------- светлая тема ----------------
+   Меняются только цвета: раскладка, поведение и анимации те же.
+   Акцент и синий обложек остаются прежними. */
+:root[data-theme="light"]{
+  --bg:            #FFFFFF;
+  --ink:           #0B0B0B;
+  --ink-dim:       #4C4C4C;
+  --ink-mute:      #8C8C8C;
+  --ink-soft:      #5A5A5A;
+  --line:          #DCDCDC;
+  --veil-k:        .62;   /* вуаль на неактивных обложках слабее */
+  --tick:          #D2D2D2;
+  --tick-hover:    #A3A3A3;
+  /* на белом фоне блик берёт не темнотой, а насыщенностью:
+     ядро — чистый оранжевый на полную плотность */
+  --beam-a:        #FFA24F;
+  --beam-b:        #FF5A0A;
+  --beam-glow:     rgba(255,90,10,.55);
+  --beam-glow-r:   20px;
+  /* спокойная линия чуть бледнее, чтобы свет по ней читался ярче */
+  --door-line:     .30;
+  --axis-line:     rgba(226,98,47,.34);
+}
+/* на белом тени между обложками читаются слабее — чуть плотнее */
+:root[data-theme="light"] .issues__fan.is-strip .card{
+  box-shadow:
+    calc(var(--shx, -1) *  2px) 0  3px rgba(0,0,0,.34),
+    calc(var(--shx, -1) * 10px) 0 18px rgba(0,0,0,.30),
+    calc(var(--shx, -1) * 26px) 2px 42px rgba(0,0,0,.24),
+    0 -6px 26px rgba(0,0,0,.20);
+}
+:root[data-theme="light"] .issues__fan.is-strip .card.is-crown{
+  box-shadow:
+     2px 0  3px rgba(0,0,0,.34),  10px 0 18px rgba(0,0,0,.30),  26px 2px 42px rgba(0,0,0,.24),
+    -2px 0  3px rgba(0,0,0,.34), -10px 0 18px rgba(0,0,0,.30), -26px 2px 42px rgba(0,0,0,.24),
+    0 -6px 26px rgba(0,0,0,.20);
+}
+/* на белом белое свечение не читается — подсветка заголовка тёплая */
+:root[data-theme="light"] .hero__h1:hover,
+:root[data-theme="light"] .hero__h2:hover,
+:root[data-theme="light"] .hero__h3:hover{
+  text-shadow:0 0 26px rgba(226,98,47,.42), 0 0 9px rgba(226,98,47,.28);
+}
+:root[data-theme="light"] .hero__big:hover{
+  text-shadow:0 0 34px rgba(226,98,47,.55), 0 0 12px rgba(226,98,47,.38);
+}
+/* активная обложка на белом: тонкий кант и мягкая посадочная тень */
+:root[data-theme="light"] .card::before{
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,.08),
+    0 0 70px rgba(226,98,47,.12),
+    0 26px 60px rgba(0,0,0,.22);
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+
+html{ background:var(--bg); scroll-behavior:auto; }
+html, body{ transition:background-color .35s var(--ease), color .35s var(--ease); }
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font);
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+
+img{ display:block; max-width:100%; }
+a{ color:inherit; text-decoration:none; }
+ul{ margin:0; padding:0; list-style:none; }
+
+/* курсорная точка ------------------------------------------------ */
+.cursor-dot{
+  position:fixed; z-index:90; top:0; left:0;
+  width:9px; height:9px; border-radius:50%;
+  background:var(--accent);
+  transform:translate(-50%,-50%) scale(0);
+  pointer-events:none; mix-blend-mode:screen;
+  transition:transform .25s var(--ease);
+}
+body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
+/* на светлом фоне режим screen обесцвечивает точку */
+:root[data-theme="light"] .cursor-dot{ mix-blend-mode:normal; }
+
+/* переключатели языка и темы: фиксированы в правом верхнем углу.
+   Ширины подобраны так, чтобы обе пилюли были одной высоты. */
+.tools{
+  position:fixed; z-index:80;
+  top:var(--pad); right:var(--pad);
+  display:flex; align-items:center; gap:clamp(10px, 1vw, 16px);
+}
+.theme, .lang{
+  padding:0; border:0; background:none;
+  cursor:pointer; line-height:0;
+  -webkit-tap-highlight-color:transparent;
+  transition:transform .25s var(--ease), opacity .25s var(--ease);
+  opacity:.92;
+}
+.theme{ width:var(--sw); }
+.lang { width:calc(var(--sw) * 1.629); }  /* пилюли одной высоты */
+.theme img, .lang img{ width:100%; height:auto; display:block; pointer-events:none; }
+.theme:hover, .lang:hover{ transform:scale(1.06); opacity:1; }
+.theme:active, .lang:active{ transform:scale(.97); }
+.theme:focus-visible, .lang:focus-visible{
+  outline:2px solid var(--accent); outline-offset:6px; border-radius:999px;
+}
+
+/* каркас сцен ---------------------------------------------------- */
+.scene{ position:relative; }
+.scene__track{ position:relative; }
+.scene__pin{
+  position:sticky; top:0;
+  height:100vh; height:100svh;
+  overflow:hidden;
+}
+
+.scene--hero .scene__track{ height:500vh; }
+/* трек короткий: и вперёд, и обратно веер проходится быстро */
+.scene--issues .scene__track{ height:780vh; }
+
+/* Сцена выпусков наезжает на «хвост» героя: веер уже поднимается,
+   пока маскот уходит вниз. Чёрной паузы между сценами нет. */
+/* Сцены наезжают друг на друга: пока маскот ещё на экране, веер уже
+   поднимается из-под него и уносит его по дуге. Маскот стоит ЗА веером,
+   поэтому сцена выпусков выше. Пин выпусков прозрачен для курсора —
+   иначе он перекрыл бы переход «Все выпуски серии» в конце героя. */
+.scene--hero{ position:relative; z-index:1; }
+/* Блок сцены героя не обрезает содержимое: маскот на перелёте едет
+   вместе с колодой соседней сцены и выходит за границы своего блока,
+   когда тот перестаёт залипать. С overflow:hidden его срезало
+   прямоугольником — на белой теме это читалось как белый блок. */
+.scene--hero .scene__pin{ pointer-events:none; overflow:visible; }
+.scene--issues{ margin-top:-180vh; position:relative; z-index:2; pointer-events:none; }
+.issues__head, .issue-info, .card{ pointer-events:auto; }
+.scene--outro{ margin-top:-100vh; position:relative; z-index:3; }
+.scene--outro .scene__track{ height:260vh; }
+
+/* ============ логотип: центр → левый верхний угол ============== */
+
+.brand{
+  position:fixed; inset:0; z-index:60;
+  display:grid; place-items:center;
+  padding:var(--pad);
+  pointer-events:none;
+}
+.brand img{
+  position:relative;
+  width:min(52vw, 620px);
+  transform-origin:50% 50%;
+  will-change:transform;
+}
+
+/* =============== S0–S3 : логотип → маскот → текст =============== */
+
+/* Маскот НЕ живёт внутри залипающего блока сцены.
+
+   Раньше он лежал в position:sticky, и когда блок героя отлипал,
+   скрипт вычитал его смещение, чтобы фигура осталась на месте. Но
+   залипание браузер считает на стороне композитора, а скрипт — на
+   основном потоке: на быстрой прокрутке значения расходились на кадр,
+   и вычитание промахивалось. Ровно это и была «дрожь» — она видна
+   только по вертикали и тем сильнее, чем быстрее прокрутка.
+
+   Теперь фигура закреплена относительно окна, и её положение целиком
+   задаёт одна трансформация из скрипта: расходиться нечему.
+   top:100svh + translateY(-100%) — это тот же нижний край экрана, что
+   и прежний bottom:0 внутри блока сцены. */
+.hero__cat{
+  position:fixed; left:50%; top:100vh; top:100svh; bottom:auto;
+  margin:0;
+  width:min(37.2vw, 74.4vh);   /* воздух вокруг: текст не наезжает */
+  transform:translate(-50%, calc(-100% + 12%));
+  opacity:0;
+  pointer-events:none;      /* закреплён на весь экран — курсор не ловит */
+  will-change:transform,opacity;
+}
+/* Дымку по краю силуэта на перелёте гасим: это слой с CSS-маской во
+   весь размер фигуры, и пересобирать его каждый кадр, пока фигура
+   едет и меняет масштаб, на телефоне дорого. Прозрачный слой браузер
+   уже не рисует. Гаснет плавно, чтобы не было скачка. */
+.hero__cat .hero__cat-haze{ transition:opacity .25s linear; }
+.hero__cat.is-flight .hero__cat-haze{ opacity:0; }
+/* Картинка морды лежит НАД глазными яблоками. Иначе на краю отверстия
+   получается двойное смешивание: полупрозрачная кромка шерсти сначала
+   ложится на фон страницы, а затем на неё — полупрозрачный край
+   глазницы, и между ними остаётся доля фона (на белой теме — светлый
+   ободок). Когда яблоко лежит снизу, а шерсть кроет его сверху, кромка
+   складывается ровно в единицу и ободка нет. */
+.hero__cat-base{ position:relative; z-index:2; width:100%; height:auto; }
+
+/* Дымка по краю фигуры. Слой повторяет силуэт маскота (маска — тот же
+   файл, что и картинка) и заливает его радиальным градиентом цвета
+   фона: центр открыт, к краю парика и воротника уходит в фон. Кот
+   «выходит из темноты» на тёмной теме и «из тумана» — на светлой.
+   Включается скриптом: при открытии страницы с диска браузер
+   не грузит CSS-маску по URL. */
+.hero__cat-haze{
+  display:none;
+  position:absolute; inset:0; z-index:3; pointer-events:none;
+  -webkit-mask-image:url("../assets/hero/cat-soft.png");
+          mask-image:url("../assets/hero/cat-soft.png");
+  -webkit-mask-size:100% 100%;  mask-size:100% 100%;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+  background:
+    radial-gradient(74% 66% at 50% 44%,
+      rgba(0,0,0,0) 0 58%, var(--bg) 100%);
+  opacity:.55;
+}
+.hero__cat.has-haze .hero__cat-haze{ display:block; }
+
+/* Глазницы лежат ПОД картинкой морды (z-index 1 против 2). Маска —
+   форма отверстия с запасом: её край приходится на плотную шерсть,
+   поэтому его не видно, а внутри отверстия яблоко непрозрачно. */
+.hero__socket{
+  position:absolute; z-index:1; overflow:hidden;
+  -webkit-mask-size:100% 100%;  mask-size:100% 100%;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+}
+/* глазное яблоко шире глазницы — глобальный max-width его не должен резать */
+.hero__eye{ position:absolute; max-width:none; will-change:transform; }
+
+/* Отдельного слоя тени над глазом нет: тень уже нарисована
+   в самом изображении глазного яблока. */
+
+.hero__text{
+  position:absolute; inset:0;
+  padding:calc(var(--pad) * 1.2);
+  pointer-events:none;
+}
+.hero__line{
+  position:absolute; margin:0;
+  opacity:0; will-change:transform,opacity;
+}
+
+/* единственная оранжевая черта на экране — над главным тезисом */
+.hero__rule{
+  display:block;
+  width:clamp(62px, 5.2vw, 108px); height:4px;
+  background:var(--accent);
+  margin:0 0 26px;
+}
+
+/* колонки одинаковой ширины: правые блоки выровнены по одному
+   левому краю, а зазор до маскота слева и справа совпадает */
+.hero__line{ width:var(--col); }
+.hero__line--lead,
+.hero__line--mid { left:var(--brand-inset);  }
+.hero__line--soft,
+.hero__line--num { right:var(--brand-inset); }
+
+/* 1 · главный тезис — слева, на средней линии экрана */
+.hero__line--lead{ top:43.5vh; }
+.hero__h1{
+  margin:0;
+  font-size:clamp(16px, 1.42vw, 30px);
+  line-height:1.3; letter-spacing:-.02em;
+  font-weight:700; color:var(--ink);
+}
+
+/* 2 · подача материала — справа выше */
+.hero__line--soft{ top:31vh; }
+.hero__h3{
+  margin:0;
+  font-size:clamp(14px, 1.1vw, 23px);
+  line-height:1.3; letter-spacing:-.01em;
+  font-weight:700; color:var(--ink);
+}
+
+/* 3 · части работы аналитика — слева ниже */
+.hero__line--mid{ top:60.5vh; }
+.hero__h2{
+  margin:0;
+  font-size:clamp(13px, .93vw, 19px);
+  line-height:1.35; font-weight:700; color:var(--ink);
+}
+
+/* 4 · число 12 — справа ниже, единственный крупный акцент */
+.hero__line--num{ top:57.5vh; }
+.hero__count{
+  margin:0;
+  display:flex; align-items:flex-start; gap:clamp(12px,1.05vw,22px);
+}
+.hero__big{
+  font-size:clamp(52px, 5.6vw, 112px);
+  font-weight:700; line-height:.86; letter-spacing:-.045em;
+  color:var(--accent);
+}
+.hero__count-txt{
+  font-size:clamp(15px, 1.32vw, 28px);
+  line-height:1.28; font-weight:400; color:var(--ink);
+}
+
+.hero__p{
+  margin:18px 0 0;
+  font-size:clamp(12px, .78vw, 16px);
+  line-height:1.55; color:var(--ink-soft);
+}
+.hero__line--num .hero__p{ margin-top:22px; }
+
+/* Ручные переносы строк — только на широком экране. На узких за
+   разбивку отвечает скрипт: он не даёт коротким словам (предлогам,
+   союзам, артиклям) оставаться в конце строки. */
+.wide{ display:none; }
+@media (min-width:1280px){ .wide{ display:inline; } }
+
+/* заголовки на первом экране откликаются на курсор: мягкое свечение,
+   без смены цвета и без сдвига макета. Указатель включает скрипт —
+   только для тех блоков, которые сейчас видны */
+.hero__h1, .hero__h2, .hero__h3{
+  transition:text-shadow .25s var(--ease), color .25s var(--ease);
+}
+.hero__h1:hover, .hero__h2:hover, .hero__h3:hover{
+  text-shadow:0 0 34px rgba(255,255,255,.70), 0 0 14px rgba(255,255,255,.45), 0 0 4px rgba(255,255,255,.30);
+}
+/* Светится ТОЛЬКО цифра и только когда указатель на ней самой.
+   Подпись рядом не подсвечивается: на вертикальном экране она идёт
+   с цифрой одной строкой, и подсветка выхватывала первую строку
+   текста вместе с числом. */
+.hero__big{ transition:text-shadow .25s var(--ease), color .25s var(--ease); }
+.hero__big:hover{
+  text-shadow:0 0 44px rgba(226,98,47,.85), 0 0 16px rgba(226,98,47,.60), 0 0 5px rgba(255,150,102,.40);
+}
+
+/* переход к выпускам: полупрозрачная ось проходит сквозь надпись
+   и заканчивается стрелкой; по оси бежит световой импульс */
+.hero__cta{
+  position:absolute; right:var(--brand-inset); bottom:5vh; z-index:5;
+  display:block; padding:46px 0 56px;
+  pointer-events:auto; cursor:pointer;
+  opacity:0; will-change:transform,opacity;
+}
+.hero__cta-text{
+  position:relative; z-index:1; display:block;
+  font-family:var(--mono); font-size:11.5px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--ink); white-space:nowrap;
+  transition:color .3s var(--ease);
+}
+/* Слой оси шире самой линии: линия рисуется фоном по центру, а запас
+   по бокам нужен свечению бегущего импульса — маска и border-box
+   обрезали бы его по ширине линии. Центр слоя всегда на 2.3 px от
+   правого края надписи, там же, где наконечник. */
+.hero__cta-axis{
+  position:absolute; z-index:2; top:0; bottom:0;
+  right:0; width:2.6px;
+  background:var(--axis-line);
+  pointer-events:none;
+  /* На уровне надписи ось растворяется — стрелка проходит сквозь текст. */
+  -webkit-mask-image:linear-gradient(180deg,
+    #000 0 27%, rgba(0,0,0,0) 39%, rgba(0,0,0,0) 52%, #000 64%);
+          mask-image:linear-gradient(180deg,
+    #000 0 27%, rgba(0,0,0,0) 39%, rgba(0,0,0,0) 52%, #000 64%);
+  -webkit-mask-size:100% 100%;  mask-size:100% 100%;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+}
+/* Наконечник мерно ходит вниз-вверх: это единственное движение
+   у перехода, и оно само по себе зовёт прокрутить дальше.
+   Бегущего по оси блика больше нет. */
+@keyframes ctaBob{
+  0%, 100% { transform:translateY(0)   rotate(45deg); }
+  50%      { transform:translateY(7px) rotate(45deg); }
+}
+/* наконечник — той же толщины, что и ось */
+.hero__cta::after{
+  content:""; position:absolute; z-index:2;
+  right:2.3px; bottom:0; margin-right:-5.5px;
+  width:11px; height:11px;
+  border-right:2.6px solid rgba(226,98,47,.85);
+  border-bottom:2.6px solid rgba(226,98,47,.85);
+  transform:rotate(45deg);
+  animation:ctaBob 2.2s var(--ease) infinite;
+  pointer-events:none;
+}
+.hero__cta:hover .hero__cta-text{ color:var(--accent); }
+
+.hero__hint{
+  position:absolute; left:50%; bottom:26px;
+  transform:translateX(-50%);
+  font-size:11px; letter-spacing:.28em; text-transform:uppercase;
+  color:var(--ink-mute);
+  will-change:opacity;
+}
+.hero__hint span{ display:block; animation:breathe 2.6s var(--ease) infinite; }
+@keyframes breathe{ 0%,100%{opacity:.35} 50%{opacity:1} }
+
+/* ===================== S4 : веер выпусков ====================== */
+
+/* строка индикатора — правее логотипа, на одной с ним линии */
+.issues__head{
+  position:absolute; z-index:3;
+  left:calc(var(--pad) + var(--brand-w) + 34px);
+  top:calc(var(--pad) + var(--brand-h) / 2 - 8px);
+  display:flex; align-items:center; gap:18px;
+}
+.ticks{ display:flex; gap:8px; align-items:center; }
+.tick{
+  width:18px; height:3px; border:0; padding:0;
+  background:var(--tick, #3A3A3A); cursor:pointer;
+  transition:background .25s var(--ease), transform .25s var(--ease);
+}
+.tick:hover{ background:var(--tick-hover, #5E5E5E); }
+.tick[aria-selected="true"]{ background:var(--accent); transform:scaleY(1.6); }
+/* клавиатурный фокус виден: и на рисках, и на самих обложках —
+   мышью и пальцем эта рамка не появляется */
+.tick:focus-visible{ outline:2px solid var(--accent); outline-offset:5px; }
+.card:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; }
+.issues__counter{
+  margin:0; white-space:nowrap;
+  font-family:var(--mono); font-size:12px; color:var(--ink-mute);
+  letter-spacing:.1em;
+}
+
+/* Блок выпуска: крупная типографика слева, краткое содержание —
+   узкой колонкой справа. Тексты из issues_description.md не меняются. */
+.issue-info{
+  position:absolute; z-index:3;
+  left:var(--pad); top:18vh;
+  width:min(72vw, 1040px);
+}
+.issue-info__num{
+  margin:0 0 12px;
+  font-family:var(--mono); font-size:12px; letter-spacing:.18em;
+  color:var(--accent);
+}
+.issue-info__title{
+  margin:0;
+  font-size:clamp(26px, 3.2vw, 52px);
+  line-height:1.02;
+  letter-spacing:-.03em;
+  font-weight:700;
+  text-wrap:balance;
+}
+.issue-info__rule{
+  display:block; width:64px; height:3px; background:var(--accent);
+  margin:16px 0 14px;
+}
+.issue-info__desc{
+  margin:0; max-width:none;
+  white-space:pre-line;          /* переносы строк заданы в data.js */
+  font-size:clamp(13px, .92vw, 15px);
+  line-height:1.65;
+  color:var(--ink-dim);
+}
+/* Десктоп: название всегда в ОДНУ строку. Самое длинное из двенадцати
+   («Software Requirements Specification») просит 865 px при кегле 52,
+   поэтому колонка названия — 56 vw, но не больше 920 px. Строка
+   названия проходит ВЫШЕ верхней кромки фокусной обложки, поэтому
+   с ней не сталкивается даже на самом длинном выпуске.
+   Описание переносится по своим строкам и остаётся узким. */
+@media (min-width:1280px) and (min-height:561px){
+  .issue-info__title{ max-width:none; white-space:nowrap; }
+}
+.issue-info.is-swap .issue-info__title,
+.issue-info.is-swap .issue-info__desc,
+.issue-info.is-swap .issue-info__num{ opacity:0; transform:translateY(6px); }
+.issue-info__num,.issue-info__title,.issue-info__desc{
+  transition:opacity .22s var(--ease), transform .22s var(--ease);
+}
+
+.issues__fan{
+  position:absolute; inset:0; z-index:4;
+}
+/* добавочные карты видны только на перелёте */
+.card--echo{ display:none; }
+.issues__fan.is-strip .card--echo{ display:block; }
+/* лента под маскотом: обложки сходятся к центральной, поэтому тень
+   каждой падает в ту сторону, где она накрывает соседнюю.
+   --shx задаёт направление (−1 слева от центра, +1 справа). */
+.issues__fan.is-strip .card{
+  box-shadow:
+    calc(var(--shx, -1) *  2px) 0  3px rgba(0,0,0,.28),
+    calc(var(--shx, -1) * 10px) 0 18px rgba(0,0,0,.25),
+    calc(var(--shx, -1) * 26px) 2px 42px rgba(0,0,0,.21),
+    0 -6px 26px rgba(0,0,0,.18);
+}
+/* верхняя карта лежит на обеих соседях — тень в обе стороны */
+.issues__fan.is-strip .card.is-crown{
+  box-shadow:
+     2px 0  3px rgba(0,0,0,.28),  10px 0 18px rgba(0,0,0,.25),  26px 2px 42px rgba(0,0,0,.21),
+    -2px 0  3px rgba(0,0,0,.28), -10px 0 18px rgba(0,0,0,.25), -26px 2px 42px rgba(0,0,0,.21),
+    0 -6px 26px rgba(0,0,0,.18);
+}
+/* Раскрытый веер выпусков: у обложек светлый верх, и на белой теме он
+   сливался с фоном. Небольшая тень отделяет каждую обложку от фона и от
+   соседней — направление задаёт --shx, как и в ленте под маскотом. */
+.issues__fan:not(.is-strip) .card{
+  box-shadow:
+    calc(var(--shx, -1) * 2px) 1px  4px rgba(0,0,0,.22),
+    calc(var(--shx, -1) * 8px) 4px 18px rgba(0,0,0,.16);
+}
+:root[data-theme="light"] .issues__fan:not(.is-strip) .card{
+  box-shadow:
+    calc(var(--shx, -1) * 2px) 1px  4px rgba(0,0,0,.26),
+    calc(var(--shx, -1) * 8px) 4px 18px rgba(0,0,0,.20);
+}
+.card{
+  position:absolute; top:0; left:0;
+  /* бокс — по самому крупному (фокусному) размеру обложки, вниз она
+     только ужимается: увеличение не размывает растр слоя */
+  width:var(--cwbox, var(--cw)); height:var(--chbox, var(--ch));
+  transform-origin:50% 50%;
+  cursor:pointer;
+  background:#08203a;
+  will-change:transform,opacity;
+}
+.card img{ width:100%; height:100%; object-fit:cover; }
+.card::after{
+  content:""; position:absolute; inset:0;
+  background:var(--bg);
+  opacity:calc(var(--dim, .74) * var(--veil-k, 1));
+  transition:opacity .3s var(--ease);
+}
+.card.is-active{ z-index:20; }
+/* Активный номер едва заметно подсвечен. Подсветка живёт отдельным
+   слоем и переходит от карты к карте вместе с вуалью. */
+.card::before{
+  content:""; position:absolute; inset:0;
+  pointer-events:none;
+  opacity:var(--fw, 0);
+  transition:opacity .3s var(--ease);
+  /* Тёмная тема: вокруг фокусной обложки — мягкое холодно-белое
+     свечение. Два слоя: узкий держит кромку, широкий отделяет
+     обложку от почти чёрного фона. Тёплый оранжевый остаётся самым
+     дальним и едва заметным, иначе подсветка спорит с акцентом. */
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.14),
+    0 0 20px rgba(255,250,243,.18),
+    0 0 58px rgba(255,244,232,.22),
+    0 0 120px rgba(226,98,47,.10),
+    0 30px 70px rgba(0,0,0,.65);
+}
+
+/* ========== S5–S6 : закрывающая сцена ==========
+   Полка со статистикой поднимается и встаёт под логотипом,
+   затем её выталкивает утверждение, за ним — двери. */
+.rail,
+.claim,
+.doors,
+.foot{
+  position:absolute; left:var(--pad); right:var(--pad);
+  will-change:transform,opacity;
+}
+.rail{ top:calc(var(--pad) + var(--brand-h) + 3vh); }
+.claim{ top:40vh; }
+.doors{ top:60vh; }
+.foot{ bottom:3vh; }
+
+.claim{
+  display:grid;
+  grid-template-columns:minmax(0, 1.40fr) minmax(0, .60fr);
+  column-gap:clamp(30px, 4vw, 72px);
+  align-items:start;
+  will-change:transform,opacity;
+}
+.claim__head{
+  margin:0;
+  font-size:clamp(28px, 3.9vw, 62px);
+  line-height:1.05;
+  letter-spacing:-.035em;
+  font-weight:700;
+  text-transform:uppercase;
+}
+.claim__dot{ color:var(--accent); }
+/* колонка справа набрана так, чтобы её высота совпадала
+   с высотой крупного утверждения слева */
+.claim__note{
+  margin:0; padding-top:10px;
+  border-top:1px solid var(--line);
+  font-size:clamp(12px, .84vw, 13.5px);
+  line-height:1.75; color:var(--ink-dim);
+}
+.doors{ will-change:transform,opacity; }
+
+/* ======================= S5 : финал ============================ */
+
+.rail{ display:grid; gap:clamp(24px,3.6vh,44px); }
+
+.rail__items{
+  display:grid; grid-template-columns:repeat(3, 1fr);
+  border-top:1px solid var(--line);
+}
+.rail__item{
+  position:relative;
+  padding:clamp(28px,4vh,46px) clamp(16px,2.4vw,40px) 0;
+}
+.rail__item + .rail__item{ border-left:1px solid var(--line); }
+/* узел на оси */
+.rail__node{
+  position:absolute; top:-4px; left:clamp(16px,2.4vw,40px);
+  width:7px; height:7px; border-radius:50%;
+  background:var(--ink-mute);
+}
+.rail__item--accent .rail__node{ background:var(--accent); }
+.rail__item--accent .rail__k{ color:var(--accent); font-weight:800; letter-spacing:-.04em; }
+
+.rail__k{
+  margin:0;
+  font-size:clamp(30px,4.2vw,64px); font-weight:300;
+  letter-spacing:-.03em; line-height:1;
+}
+.rail__tag{
+  margin:16px 0 0;
+  font-family:var(--mono); font-size:11px; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--ink-mute);
+}
+
+
+.doors{
+  display:grid; grid-template-columns:1fr auto 1fr; align-items:stretch;
+  border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+}
+.doors__split{ width:1px; background:var(--line); }
+.door{
+  position:relative; display:grid; gap:10px; cursor:pointer;
+  padding:clamp(26px,3.4vw,48px) clamp(18px,3vw,40px);
+  transition:background .35s var(--ease), transform .35s var(--ease);
+  overflow:hidden;
+}
+/* тонкая линия видна всегда — сразу читается как активная зона */
+.door::after{
+  content:""; position:absolute; left:0; right:0; bottom:0; height:2px;
+  background:var(--accent); opacity:var(--door-line, .28);
+}
+.door::before{
+  content:""; position:absolute; left:0; right:0; bottom:0; height:2px;
+  background:var(--accent); transform:scaleX(0); transform-origin:0 50%;
+  transition:transform .45s var(--ease);
+  z-index:1;
+}
+.door:hover,.door:focus-visible{
+  background:radial-gradient(120% 140% at 0% 100%, rgba(226,98,47,.16), transparent 62%);
+  transform:translateY(-2px);
+}
+.door:hover::before,.door:focus-visible::before{ transform:scaleX(1); }
+.door:focus-visible{ outline:none; }
+
+/* бегущий блик по нижней границе русской двери — целевое действие */
+.door__beam{
+  position:absolute; left:0; bottom:0; z-index:2;
+  width:38%; height:var(--beam-glow-r);
+  background:
+    /* ядро — та же полоска в 2 px на самой границе */
+    linear-gradient(90deg, transparent, var(--beam-a), var(--beam-b), transparent)
+      0 100% / 100% 2px no-repeat,
+    /* и свет над ней: он и делает бегущий блик заметным */
+    radial-gradient(58% 100% at 50% 100%, var(--beam-glow), transparent 72%)
+      0 0 / 100% 100% no-repeat;
+  animation:doorBeam 3.8s var(--ease) infinite;
+  pointer-events:none;
+}
+@keyframes doorBeam{
+  0%       { transform:translateX(-100%); opacity:0; }
+  12%      { opacity:1; }
+  70%      { opacity:1; }
+  85%,100% { transform:translateX(263%); opacity:0; }
+}
+.door__go{
+  font-family:var(--mono); font-size:11px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--accent);
+  opacity:.55; transition:opacity .35s var(--ease), transform .35s var(--ease);
+}
+.door:hover .door__go{ opacity:1; transform:translateX(4px); }
+.door__lang{
+  font-family:var(--mono); font-size:12px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--ink-mute);
+}
+.door__name{
+  font-size:clamp(34px,5.4vw,80px); font-weight:700; letter-spacing:-.03em;
+  line-height:1;
+}
+.door__arrow{
+  position:absolute; right:clamp(18px,3vw,40px); top:clamp(26px,3.4vw,48px);
+  font-size:26px; line-height:1; color:var(--accent);
+  transition:transform .4s var(--ease);
+  animation:arrowNudge 2.8s var(--ease) infinite;
+}
+@keyframes arrowNudge{
+  0%,100%{ transform:translate(0,0); }
+  55%    { transform:translate(5px,-5px); }
+}
+.door:hover .door__arrow{ transform:translate(7px,-7px); }
+
+.foot{
+  display:flex; align-items:center; gap:18px;
+  padding-top:24px;
+  color:var(--ink-mute); font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+}
+
+/* ========================= адаптив ============================= */
+
+/* Планшет-альбом и невысокие ноутбуки: колонки по 22vw становятся
+   слишком узкими, текст набирает лишние строки и левые блоки сходятся.
+   Даём колонкам больше ширины за счёт маскота и разводим их по высоте. */
+@media (min-width:901px) and (max-width:1279px) and (orientation:landscape){
+  :root{ --col: min(27vw, 340px); }
+  .claim{ align-items:end; }   /* заголовок по нижнему краю правого текста */
+  .hero__cat{ width:min(31vw, 60vh); }
+  .hero__line--lead{ top:38vh; }
+  .hero__line--soft{ top:24vh; }
+  .hero__line--mid { top:64vh; }
+  .hero__line--num { top:57vh; }
+  .hero__cta{ padding:34px 0 44px; bottom:4vh; }
+  :root{ --sw: clamp(50px, 5.6vw, 62px); }
+}
+/* Невысокий экран при большой ширине — то же лекарство по вертикали */
+@media (min-width:1280px) and (max-height:820px){
+  .hero__line--lead{ top:40vh; }
+  .hero__line--soft{ top:26vh; }
+  .hero__line--mid { top:64vh; }
+  .hero__line--num { top:58vh; }
+}
+
+/* Узкая раскладка: телефон в любом положении и планшет, стоящий
+   вертикально. На вертикальном планшете две колонки вокруг маскота
+   расползаются по экрану, поэтому там та же одна колонка. */
+@media (max-width: 900px),
+       (max-width: 1279px) and (orientation: portrait){
+  .scene--hero .scene__track{ height:500vh; }
+  .scene--issues .scene__track{ height:750vh; }
+
+  .brand img{ width:76vw; }
+  /* Маскот и кегли на вертикальном экране заданы долей ШИРИНЫ: от
+     телефона до вертикального планшета композиция одна и та же,
+     меняется только масштаб. Высота ограничивает маскота, чтобы он
+     не наезжал на переход «Все выпуски». --ts ужимает набор на
+     низких экранах, сохраняя пропорции. */
+  .hero__cat{ width:min(78vw, 62vh); }
+  /* --ts — общий коэффициент набора: на низких экранах он ужимает
+     кегли первого экрана, сохраняя пропорции композиции. Сами кегли
+     заданы ниже через --tb и --th. */
+  :root{ --sw: clamp(44px, 12vw, 54px); --ts:1; }
+
+  .hero__line{
+    left:var(--brand-inset); right:var(--pad); width:auto;
+    /* Жирная фраза и продолжение идут одной строкой, поэтому высота
+       строки берётся из «распорки» самого блока. Без этого на телефоне
+       шаг строк задавал не текст (12.5 px × 1.25), а унаследованные
+       16 px — строки расходились, и последняя уезжала под цифру. */
+    font-size:var(--tb); line-height:1.25;
+  }
+  .hero__line--num,
+  .hero__line--soft{ left:var(--brand-inset); right:var(--pad); }
+  .hero__line--mid{ left:var(--brand-inset); }
+  /* Кегли сняты с макетов mobile.png и tablet.png. Там основной текст
+     занимает 2.78 % ширины на телефоне и 2.52 % на планшете, заголовок
+     — 5.19 % и 4.88 %; отношение заголовка к тексту 1.87…1.94. На
+     телефоне доля ширины даёт 10–11 px — читать нечем, поэтому у
+     основного текста есть нижний порог, а заголовок задан отдельной
+     плавной шкалой: на планшете отношение выходит к макетным 1.9,
+     а на телефоне заголовок остаётся крупным, но не ломает переносы.
+     --tb — единица основного текста, от неё считаются отступы. */
+  :root{ --tb: clamp(12.5px, calc(2.52vw * var(--ts)), 22px);
+         --th: clamp(20px,   calc(4.89vw * var(--ts)), 44px); }
+  .hero__rule{ width:clamp(46px, calc(14vw * var(--ts)), 120px);
+               height:clamp(3px, 1.05vw, 9px);
+               margin-bottom:calc(var(--tb) * 1.65); }
+  /* интерлиньяж с макетов: заголовок 1.13…1.16, текст 1.22…1.24 */
+  .hero__h1{ font-size:var(--th); line-height:1.15; }
+  .hero__big{ font-size:calc(var(--tb) * 5); }
+  .hero__h2, .hero__h3, .hero__p, .hero__count-txt{
+    font-size:var(--tb); line-height:1.25;
+  }
+  .hero__count-txt{ font-weight:400; color:var(--ink-soft); }
+  .hero__p{ margin-top:0; }
+  /* на узком экране переход стоит справа, под текстом и над маскотом */
+  .hero__cta{
+    left:auto; right:calc(var(--pad) + 12px); top:57vh; bottom:auto;
+    /* длина оси со стрелкой — доля кегля текста: на макетах она
+       растёт вместе с набором, а не остаётся одной и той же */
+    padding:calc(var(--tb) * 1.2) 0 calc(var(--tb) * 2);
+  }
+  /* На узком экране ось идёт СБОКУ от надписи, а не сквозь неё:
+     разрыв не нужен, зато нужен отступ от последней буквы. Сверху
+     линия мягко проявляется, чтобы не начиналась обрубком. */
+  .hero__cta-axis{
+    right:-12px; width:2.2px;
+    -webkit-mask-image:linear-gradient(180deg, rgba(0,0,0,0) 0, #000 30%, #000 100%);
+            mask-image:linear-gradient(180deg, rgba(0,0,0,0) 0, #000 30%, #000 100%);
+  }
+  .hero__cta::after{ right:-11px; bottom:0; width:9px; height:9px; margin-right:-4.5px;
+    border-right-width:2.2px; border-bottom-width:2.2px; }
+  /* верхний блок не заходит под логотип даже на низком экране */
+  .hero__line--lead{ top:max(8vh, calc(var(--pad) + var(--brand-h) + 24px)); }
+  .hero__line--soft{ top:23vh; }
+  .hero__line--mid { top:33vh; }
+  .hero__line--num { top:47vh; }
+
+  /* Как на десктопе: номер, название и пояснение — сверху, веер —
+     снизу. Раньше подпись стояла под веером и пояснение открывалось
+     по тапу; на узком экране это читалось как «описания просто нет». */
+  .issue-info{
+    left:var(--pad); right:var(--pad); width:auto;
+    top:calc(var(--pad) + var(--brand-h) + 92px); bottom:auto;
+  }
+  .issue-info__num{ margin-bottom:8px; font-size:11px; }
+  .issue-info__title{ font-size:23px; line-height:1.06; }
+  .issue-info__rule{ width:48px; height:3px; margin:12px 0 11px; }
+  .issue-info__desc{
+    display:block; white-space:normal;   /* переносы из data.js тут лишние */
+    font-size:12px; line-height:1.55;
+  }
+  .issues__head{
+    left:var(--pad);
+    top:calc(var(--pad) + var(--brand-h) + 46px);
+    gap:12px;
+  }
+  .ticks{ gap:6px; }
+  .tick{ width:12px; }
+
+  /* закрывающая сцена на узком экране */
+  /* строки статистики начинаются заметно ниже логотипа: иначе при
+     уходе вверх они наезжают на него */
+  .rail{ top:calc(var(--pad) + var(--brand-h) + 8vh); gap:18px; }
+  .claim{ top:33vh; }
+  .doors{ top:66vh; }
+  .foot{ bottom:2vh; }
+  /* три строки идут одна под другой: между ними нужен воздух, иначе
+     подпись предыдущей строки липнет к линейке следующей */
+  .rail__items{ grid-template-columns:1fr; }
+  .rail__item{ padding:18px 0 24px; }
+  .rail__item + .rail__item{ border-left:0; border-top:1px solid var(--line); }
+  .rail__node{ left:0; top:-4px; }
+  .rail__k{ font-size:25px; }
+  .rail__tag{ margin-top:9px; }
+  .claim{ grid-template-columns:1fr; gap:18px; align-items:start; }
+  .claim__head{ font-size:26px; }
+  .door{ padding:17px clamp(18px,3vw,40px); }
+  .door__arrow{ top:17px; }
+  .door__name{ line-height:.95; }
+  .foot{ padding-top:10px; }
+  .doors{ grid-template-columns:1fr; }
+  .doors__split{ width:auto; height:1px; }
+  .cursor-dot{ display:none; }
+}
+
+/* Невысокий телефон: четыре блока и переход не помещаются в 740 px —
+   сжимаем межстрочные отступы и разводим блоки по вертикали. */
+@media (max-width:900px) and (max-height:780px) and (orientation:portrait){
+  :root{ --ts:.92; }
+  .hero__line--lead{ top:max(7vh, calc(var(--pad) + var(--brand-h) + 20px)); }
+  .hero__line--soft{ top:24vh; }
+  .hero__line--mid { top:35vh; }
+  .hero__line--num { top:49vh; }
+  .hero__cta{ top:59vh; }
+  .hero__cat{ width:min(70vw, 40vh); }
+}
+
+/* ======== вертикальный экран: строение первого экрана ========
+   Подзаголовок и текст идут одним абзацем: жирная фраза открывает
+   его, дальше строка продолжается обычным начертанием. У «12» цифра
+   обтекается текстом, поэтому подпись и следующий абзац стоят одной
+   колонкой справа от неё. Оба правила — из макетов mobile.png
+   и tablet.png; телефона лёжа они не касаются. */
+@media (max-width:1279px) and (orientation:portrait){
+  /* Жирная фраза открывает абзац, обычный текст продолжает ЕГО ЖЕ
+     строку: переноса между ними нет, пара идёт сплошным потоком.
+     Начертание не меняется — первое предложение остаётся жирным. */
+  .hero__h2, .hero__h3,
+  .hero__line--soft .hero__p, .hero__line--mid .hero__p{
+    display:inline; margin-top:0;
+  }
+  /* У «12» так же: подпись и следующее предложение идут одним
+     потоком — второе начинается в той же строке, где кончилось
+     первое. */
+  .hero__count-txt,
+  .hero__line--num .hero__count,
+  .hero__line--num .hero__p{ display:inline; }
+  /* кегль надписи перехода с макетов: 2.3 % ширины экрана */
+  .hero__cta-text{ font-size:clamp(11px, 2.28vw, 20px); }
+  /* Просвет между цифрой и колонкой текста: на макетах это 4.2 %
+     ширины колонки на телефоне и 7.5 % на планшете. Процент считается
+     от ширины блока, поэтому одно правило работает на обоих. */
+  .hero__line--num .hero__big{
+    float:left; line-height:.86;
+    margin-right:5.5%;
+  }
+}
+
+/* ============ планшет, стоящий вертикально ============
+   Раскладка та же, что на телефоне, но экран крупный: кегли на нём
+   выглядели «игрушечными», а блоки расползались по высоте. Здесь
+   тот же порядок блоков, только крупнее и плотнее. */
+@media (min-width:601px) and (max-width:1279px) and (orientation:portrait){
+  :root{ --sw: clamp(56px, 7vw, 72px); }
+  .brand img{ width:56vw; }
+  /* Кегли и маскот те же доли ширины, что и на телефоне: композиция
+     первого экрана одинакова на любом вертикальном экране, меняется
+     только масштаб. --ts чуть ужимает набор, потому что строка здесь
+     длиннее, а высота экрана относительно ширины меньше. */
+  .hero__cat{ width:min(84vw, 74vh); }
+  .hero__line{ right:auto; width:min(89vw, 960px); }
+  .hero__rule{ height:4px; }
+
+  /* блоки стоят ближе друг к другу: на планшете их разносило по всей
+     высоте, и связь между ними терялась */
+  .hero__line--lead{ top:max(7vh, calc(var(--pad) + var(--brand-h) + 26px)); }
+  .hero__line--soft{ top:24vh; }
+  .hero__line--mid { top:36vh; }
+  .hero__line--num { top:47vh; }
+  .hero__cta{ top:60vh; }
+
+  .issues__head{ top:calc(var(--pad) + var(--brand-h) + 30px); gap:16px; }
+  .tick{ width:18px; }
+  .issues__counter{ font-size:14px; }
+  .issue-info{ top:calc(var(--pad) + var(--brand-h) + 78px); }
+  .issue-info__num{ font-size:13px; margin-bottom:12px; }
+  .issue-info__title{ font-size:clamp(30px, 4.2vw, 46px); }
+  .issue-info__rule{ width:64px; height:3px; margin:18px 0 16px; }
+  .issue-info__desc{ font-size:clamp(15px, 1.9vw, 20px); line-height:1.6; }
+
+  .rail{ top:calc(var(--pad) + var(--brand-h) + 7vh); gap:26px; }
+  .rail__item{ padding:24px 0 30px; }
+  .rail__k{ font-size:clamp(30px, 4.2vw, 46px); }
+  .rail__tag{ font-size:13px; margin-top:12px; }
+  .claim{ gap:26px; }
+  .claim__head{ font-size:clamp(30px, 4.4vw, 48px); }
+  .claim__note{ font-size:clamp(14px, 1.8vw, 19px); line-height:1.7; }
+  .door{ padding:24px clamp(20px,3vw,40px); }
+  .door__lang{ font-size:12px; }
+  .door__go{ font-size:12px; }
+  .foot{ font-size:12px; }
+}
+
+/* Невысокий телефон (iPhone SE и подобные): четыре текстовых блока,
+   переход и маскот в 660–700 px по высоте помещаются только в самом
+   плотном наборе. */
+@media (max-width:900px) and (max-height:700px) and (orientation:portrait){
+  :root{ --ts:.86; }
+  .hero__rule{ height:3px; }
+
+  .hero__line--lead{ top:max(8vh, calc(var(--pad) + var(--brand-h) + 18px)); }
+  .hero__line--soft{ top:26vh; }
+  .hero__line--mid { top:38vh; }
+  .hero__line--num { top:51vh; }
+  .hero__cta{ top:60vh; padding:calc(var(--tb) * 1) 0 calc(var(--tb) * 1.6); }
+  .hero__cat{ width:min(66vw, 36vh); }
+}
+
+/* ================== телефон лёжа ==================
+   Ширины хватает, а высоты — нет: 360…430 px. Вертикальная раскладка
+   узкого экрана здесь не работает, блоки наезжают друг на друга.
+   Поэтому на первом экране возвращаем две колонки вокруг маскота,
+   в сцене выпусков уводим веер вправо от текста, а закрывающую сцену
+   собираем обратно в три колонки и ужимаем кегли. */
+@media (max-width:1024px) and (max-height:560px) and (orientation:landscape){
+  :root{ --col: min(30vw, 300px); --sw: clamp(30px, 4vw, 42px); }
+
+  .brand img{ width:42vw; }
+  .hero__cat{ width:min(26vw, 48vh); }
+
+  .hero__line{ width:var(--col); }
+  .hero__line--lead,
+  .hero__line--mid { left:var(--brand-inset); right:auto; }
+  .hero__line--soft,
+  .hero__line--num { right:var(--pad); left:auto; }
+  .hero__line--lead{ top:41vh; }
+  .hero__line--soft{ top:20vh; }
+  .hero__line--mid { top:68vh; }
+  .hero__line--num { top:57vh; }
+
+  .hero__rule{ width:30px; height:3px; margin-bottom:8px; }
+  .hero__h1{ font-size:14.5px; line-height:1.24; }
+  .hero__h3{ font-size:12.5px; line-height:1.24; }
+  .hero__h2{ font-size:12px; line-height:1.28; }
+  .hero__p { font-size:10px; line-height:1.45; margin-top:6px; }
+  .hero__line--num .hero__p{ margin-top:7px; }
+  .hero__big{ font-size:32px; }
+  .hero__count-txt{ font-size:11px; }
+
+  /* переход уводим вправо-вниз: слева под текстом места нет */
+  .hero__cta{ right:var(--pad); left:auto; top:auto; bottom:4vh;
+              padding:14px 0 18px; }
+  .hero__cta::after{ width:8px; height:8px; margin-right:-4px;
+                     border-right-width:2px; border-bottom-width:2px; }
+  .hero__hint{ display:none; }
+
+  /* Выпуски: композиция как на десктопе — текст слева, цепочка
+     обложек от края до края, фокусный номер крупнее и правее центра.
+     Колонка текста шире, чем была (31vw): чем меньше строк, тем выше
+     проходит верх цепочки. Правее 46vw её вести нельзя — там начинается
+     фокусная обложка. Кегли заданы через общий множитель --isk: его
+     подбирает fitIssueFlat() в js/main.js, чтобы текст закончился выше
+     цепочки на любом телефоне. */
+  .issues__head{ top:calc(var(--pad) + var(--brand-h) + 8px); gap:8px; }
+  .issue-info{
+    left:var(--pad); right:auto; width:46vw;
+    top:calc(var(--pad) + var(--brand-h) + 36px);
+  }
+  .issue-info__num{ margin-bottom:6px; font-size:calc(10px * var(--isk, 1)); }
+  .issue-info__title{ font-size:calc(18px * var(--isk, 1)); }
+  .issue-info__rule{ width:38px; height:2px; margin:8px 0 8px; }
+  .issue-info__desc{ font-size:calc(10.5px * var(--isk, 1)); line-height:1.5; }
+  .tick{ width:9px; }
+  .issues__counter{ font-size:10px; }
+
+  /* закрывающая сцена: снова три колонки, всё мельче */
+  /* строки статистики стоят заметно ниже логотипа: при уходе вверх
+     они не должны на него наезжать */
+  .rail{ top:calc(var(--pad) + var(--brand-h) + 9vh); gap:10px; }
+  .rail__items{ grid-template-columns:repeat(3, 1fr); }
+  .rail__item{ padding:12px 12px 0; }
+  .rail__item + .rail__item{ border-left:1px solid var(--line); border-top:0; }
+  .rail__node{ left:12px; }
+  .rail__item:first-child .rail__node{ left:0; }
+  .rail__item:first-child{ padding-left:0; }
+  .rail__k{ font-size:19px; }
+  .rail__tag{ margin-top:6px; font-size:9px; letter-spacing:.14em; }
+
+  /* заголовок слева ставим по нижнему краю правой колонки */
+  .claim{ grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);
+          column-gap:22px; gap:0 22px; align-items:end; }
+  .claim__head{ font-size:19px; }
+  .claim__note{ font-size:10.5px; line-height:1.5; padding-top:7px; }
+
+  .doors{ grid-template-columns:1fr auto 1fr; }
+  .doors__split{ width:1px; height:auto; }
+  .door{ padding:10px 14px; }
+  .door__lang{ font-size:9px; }
+  .door__name{ font-size:22px; }
+  .door__go{ font-size:9px; }
+  .door__arrow{ top:10px; font-size:13px; }
+  .foot{ padding-top:6px; font-size:9px; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .hero__line, .hero__cat, .brand img, .card{ transition:none !important; }
+  .hero__hint span{ animation:none; }
+}
+
+/* ============ альбомная ориентация уже 1280 ============
+   Телефон и планшет лёжа. Раскладку считает layoutHeroLand()
+   в js/main.js: размер маскота, ширину колонок по бокам от него,
+   кегли и вертикальную расстановку блоков. Здесь — только то,
+   что от раскладки не зависит.
+
+   Кегли заданы двумя переменными: --ltb (основной текст) и --lh1
+   (заголовок). Скрипт считает их от ШИРИНЫ КОЛОНКИ — так в строке
+   остаётся около 36 знаков на любом экране — и ужимает, если колонка
+   не помещается по высоте. */
+@media (orientation:landscape) and (max-width:1279px),
+       (orientation:landscape) and (max-aspect-ratio: 29/20){
+  /* значения по умолчанию — до первого прохода скрипта */
+  :root{ --ltb: 13px; --lh1: 22px; }
+  .hero__line{ right:auto; }
+  /* Ручные переносы рассчитаны на широкую десктопную колонку. Здесь
+     колонка втрое у́же: перенос после «сервисов,» оставлял бы в строке
+     два слова и рвал абзац. За разбивку тут отвечает скрипт. */
+  .wide{ display:none; }
+  .hero__rule{ width:calc(var(--ltb) * 2.4); height:2px;
+               margin-bottom:calc(var(--ltb) * .75); }
+  .hero__h1{ font-size:var(--lh1); line-height:1.18; letter-spacing:-.02em; }
+  .hero__h3, .hero__h2{ font-size:calc(var(--ltb) * 1.06); line-height:1.26; }
+  .hero__p, .hero__count-txt{ font-size:var(--ltb); line-height:1.38; }
+  /* внутри смыслового блока воздуха мало — жирная фраза и продолжение
+     читаются как один абзац */
+  .hero__p, .hero__line--num .hero__p{ margin-top:calc(var(--ltb) * .5); }
+  .hero__count{ gap:calc(var(--ltb) * .6); align-items:flex-start; }
+  .hero__big{ font-size:calc(var(--ltb) * 3.1); }
+  .hero__cta{ left:auto; top:auto; bottom:4vh;
+              padding:calc(var(--ltb) * 1.1) 0 calc(var(--ltb) * 1.8); }
+  .hero__cta-text{ font-size:calc(var(--ltb) * .84); }
+  .hero__cta::after{ width:8px; height:8px; margin-right:-4px;
+                     border-right-width:2px; border-bottom-width:2px; }
+  .hero__hint{ display:none; }
+}
