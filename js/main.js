@@ -1378,6 +1378,111 @@
   /* стрелка «Все выпуски серии» ведёт к первому номеру */
   q('#heroCta').addEventListener('click', ev => { ev.preventDefault(); jumpToIssue(0); });
 
+  /* ---------- листание веера пальцем, по горизонтали ----------
+     На телефоне рука сама тянется листать номера вбок, а не крутить
+     страницу вниз. Оба способа работают одновременно.
+
+     Жест НЕ управляет веером напрямую: он двигает ту же прокрутку, от
+     которой веер и так зависит целиком. Поэтому риски, счётчик,
+     подмена текста и уход колоды остаются прежней машинерией —
+     второго источника правды не появляется, расходиться нечему.
+
+     Включается только на сенсорном экране и только внутри сцены
+     выпусков: в первом экране и в закрывающей сцене горизонтальные
+     движения не перехватываются вовсе. */
+  const SW_EDGE  = 28;    // полоса у края экрана: там у браузера жест «назад»
+  const SW_LOCK  = 10;    // сколько пройти пальцем, прежде чем выбрать ось
+  const SW_RATIO = 1.3;   // насколько движение должно быть горизонтальнее
+  const SW_FLING = 0.6;   // вклад броска, в номерах на пиксель в миллисекунду
+  const SW_STALE = 90;    // палец замер перед отрывом — броска не было, мс
+  /* Сколько пальца приходится на один выпуск. Считаем от МЕНЬШЕЙ стороны
+     экрана: ширина у телефона лёжа большая, а рука та же, и ход «на один
+     номер» не должен от поворота телефона меняться вдвое. */
+  const swSpan = () =>
+    clamp(Math.min(window.innerWidth, window.innerHeight) * 0.38, 90, 190);
+
+  let swId = null, swX0 = 0, swY0 = 0, swSy = 0, swAxis = 0;
+  let swTop = 0, swLen = 0, swK = 0, swVx = 0, swLastX = 0, swLastT = 0;
+  /* Слушатель движения пальца обязан быть НЕпассивным — только такой
+     может отменить прокрутку браузера. Но непассивный слушатель на окне
+     заставляет браузер на КАЖДОМ касании ждать основной поток, прежде
+     чем начать прокрутку, а он у нас занят кадром сцены: обычная
+     вертикальная прокрутка начиналась бы с задержкой. Поэтому вешаем
+     его только на время жеста — с момента касания внутри сцены веера
+     и до отрыва пальца. */
+  let swBound = false;
+  function swBind(on) {
+    if (on === swBound) return;
+    swBound = on;
+    if (on) window.addEventListener('touchmove', swMove, { passive: false });
+    else    window.removeEventListener('touchmove', swMove);
+  }
+  const swOff = () => { swId = null; swAxis = 0; swBind(false); };
+
+  function swDown(ev) {
+    swOff();
+    if (!issuesRef || !ev.touches || ev.touches.length !== 1) return;
+    const t = ev.touches[0];
+    if (t.clientX < SW_EDGE || t.clientX > window.innerWidth - SW_EDGE) return;
+    const vh = viewH();
+    const ip = progressAt('issues', vh, window.scrollY);
+    if (ip < IP0() || ip > IP[1]) return;         // сейчас на экране не веер
+    const g = geo.issues;
+    swLen = g[1] - vh;
+    if (swLen <= 0) return;
+    swTop = g[0];
+    /* прокрутка, приходящаяся на один выпуск, делённая на ход пальца */
+    swK = (swLen * (IP[1] - IP0()) / (ns.issues.length - 1)) / swSpan();
+    swId  = t.identifier;
+    swX0  = swLastX = t.clientX;
+    swY0  = t.clientY;
+    swSy  = window.scrollY;
+    swVx  = 0;
+    swLastT = performance.now();
+    swBind(true);
+  }
+
+  function swMove(ev) {
+    if (swId === null) return;
+    let t = null;
+    for (let i = 0; i < ev.touches.length; i++)
+      if (ev.touches[i].identifier === swId) { t = ev.touches[i]; break; }
+    if (!t) return;
+    const dx = t.clientX - swX0, dy = t.clientY - swY0;
+    if (!swAxis) {
+      /* ось выбирается ОДИН раз за жест и дальше не пересматривается:
+         иначе диагональное движение дёргало бы страницу в обе стороны */
+      if (Math.abs(dx) < SW_LOCK && Math.abs(dy) < SW_LOCK) return;
+      swAxis = Math.abs(dx) > Math.abs(dy) * SW_RATIO ? 1 : -1;
+      if (swAxis < 0) { swOff(); return; }        // вертикаль — браузеру
+    }
+    ev.preventDefault();
+    const now = performance.now(), dt = now - swLastT;
+    if (dt > 0) swVx = (t.clientX - swLastX) / dt;
+    swLastX = t.clientX; swLastT = now;
+    /* за пределы веера жест не выводит: дальше двенадцатого номера
+       начинается уход колоды, и туда уносить пальцем нечего */
+    const lo = swTop + swLen * IP0(), hi = swTop + swLen * IP[1];
+    window.scrollTo(0, Math.round(clamp(swSy - dx * swK, lo, hi)));
+  }
+
+  function swUp() {
+    if (swId === null || swAxis !== 1) { swOff(); return; }
+    swOff();
+    const n = ns.issues.length - 1;
+    const ip = progressAt('issues', viewH(), window.scrollY);
+    const at = (ip - IP0()) / (IP[1] - IP0()) * n;
+    const fling = (performance.now() - swLastT > SW_STALE)
+      ? 0 : clamp(-swVx * SW_FLING, -2, 2);
+    jumpToIssue(Math.round(clamp(at + fling, 0, n)));
+  }
+
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    window.addEventListener('touchstart',  swDown, { passive: true });
+    window.addEventListener('touchend',    swUp,   { passive: true });
+    window.addEventListener('touchcancel', swOff,  { passive: true });
+  }
+
   /* --------------------- смена языка --------------------------
      Меняем только содержимое узлов — сами узлы остаются теми же,
      поэтому ссылки на них (выравнивание «12», строки веера)
