@@ -1615,9 +1615,9 @@
 
     /* ---------------- логотип ---------------- */
     const t = ease(span(hp, PH.logoOut));
-    brandImg.style.transform =
+    css(brandImg, 'transform',
       'translate(' + (bx * t).toFixed(1) + 'px,' + (by * t).toFixed(1) + 'px) ' +
-      'scale(' + (1 - (1 - bs) * t).toFixed(4) + ')';
+      'scale(' + (1 - (1 - bs) * t).toFixed(4) + ')');
 
     /* ------------- передача сцены S3 → S4 -------------
        fanIn : веер выходит из-под воротника, маскот чуть поднимается
@@ -1701,7 +1701,7 @@
       const from = T.carry[0] + (T.carry[1] - T.carry[0]) * k;
       fanOp = 1 - ease(span(ip, [from, T.back[0]]));
     }
-    el.fan.style.opacity = String(fanOp);
+    css(el.fan, 'opacity', fanOp.toFixed(3));
 
     /* ---------------- главный маскот ----------------
        поднимается, дорастает до размера ДО появления текста,
@@ -1736,17 +1736,17 @@
 
     /* Маскот стоит ЗА колодой: если гасить только её, он начинает
        просвечивать сквозь обложки. Гаснут вместе. */
-    el.cat.style.opacity = String(gone ? 0 : rise * fanOp);
-    el.cat.style.transform =
+    css(el.cat, 'opacity', (gone ? 0 : rise * fanOp).toFixed(3));
+    css(el.cat, 'transform',
       /* только пиксели: проценты браузер каждый кадр разрешал бы
          относительно раскладки фигуры */
       'translate(' + (dx - catWFix / 2).toFixed(1) + 'px,' +
       (baseY - catHFix).toFixed(1) + 'px) ' +
       'rotate(' + a.ang.toFixed(2) + 'deg) ' +
-      'scale(' + scale.toFixed(4) + ')';
+      'scale(' + scale.toFixed(4) + ')');
     cat.setLook(rise * (1 - clamp01(ip / tr().fanIn[1])));
     /* на перелёте выключаем дымку: слой с маской во весь силуэт */
-    el.cat.classList.toggle('is-flight', ip >= T.carry[0]);
+    cls(el.cat, 'is-flight', ip >= T.carry[0]);
 
     /* ---------------- текст вокруг маскота ----------------
        появляется снизу вверх по очереди, уходит вниз на fanIn */
@@ -1759,27 +1759,28 @@
       const o0 = PH.textOut[0] + i * OUT_STEP;
       const out = ease(clamp01((hp - o0) / OUT_SPAN));
       lastOut = out;
-      line.style.opacity = String(p * (1 - out));
-      line.style.transform =
-        'translateY(' + (34 * (1 - p) - 26 * out).toFixed(1) + 'px)';
+      css(line, 'opacity', (p * (1 - out)).toFixed(3));
+      css(line, 'transform',
+        'translateY(' + (34 * (1 - p) - 26 * out).toFixed(1) + 'px)');
       /* курсор ловит только полностью проявленный блок */
-      line.style.pointerEvents = (p > 0.9 && out < 0.1) ? 'auto' : 'none';
+      css(line, 'pointerEvents', (p > 0.9 && out < 0.1) ? 'auto' : 'none');
     });
 
-    el.hint.style.opacity = String(1 - ease(clamp01(hp / 0.08)));
+    css(el.hint, 'opacity', (1 - ease(clamp01(hp / 0.08))).toFixed(3));
 
     /* переход к выпускам: появляется после текста, уходит вместе с ним */
     const ctaIn = ease(span(hp, PH.cta));
-    el.cta.style.opacity = String(ctaIn * (1 - lastOut));
-    el.cta.style.transform =
-      'translateY(' + ((1 - ctaIn) * 24 - lastOut * 26).toFixed(1) + 'px)';
+    css(el.cta, 'opacity', (ctaIn * (1 - lastOut)).toFixed(3));
+    css(el.cta, 'transform',
+      'translateY(' + ((1 - ctaIn) * 24 - lastOut * 26).toFixed(1) + 'px)');
 
     /* заголовок появляется вместе с возвратом веера и гаснет,
        когда последний номер уже ушёл в левый нижний угол */
     const textOff = ease(span(ip, TEXT_OFF));
-    el.info.style.opacity = String(back * (1 - textOff));
-    el.head.style.opacity = String(back * (1 - textOff));
-    el.issuesPin.style.opacity = String(1 - ease(span(ip, PIN_OFF)));
+    const infoOp = (back * (1 - textOff)).toFixed(3);
+    css(el.info, 'opacity', infoOp);
+    css(el.head, 'opacity', infoOp);
+    css(el.issuesPin, 'opacity', (1 - ease(span(ip, PIN_OFF))).toFixed(3));
 
     /* ---------------- закрывающая сцена ---------------- */
     const op = progressAt('outro', vh, sy);
@@ -1795,6 +1796,13 @@
     const doorsIn = ease(span(op, ou().doors));
     const footIn  = ease(span(op, ou().foot));
 
+    /* Бесконечные анимации (подсказка, наконечник перехода, блик и
+       стрелки дверей) крутятся только тогда, когда их сцена на экране.
+       Вне её браузер каждый кадр пересчитывал их стиль впустую —
+       см. раздел в css/styles.css. */
+    cls(el.heroPin, 'sc-on', hp < 0.86);
+    cls(el.doors,   'sc-on', doorsIn > 0.01);
+
     layer(el.rail,  railIn * (1 - railOut), -railOut * 22);
     layer(el.claim, claimIn, (1 - claimIn) * 60);
     layer(el.doors, doorsIn, (1 - doorsIn) * 76);
@@ -1803,8 +1811,8 @@
 
   /** слой закрывающей сцены: прозрачность и подъём снизу */
   function layer(node, o, dy) {
-    node.style.opacity = o.toFixed(3);
-    node.style.transform = 'translateY(' + dy.toFixed(1) + 'px)';
+    css(node, 'opacity', o.toFixed(3));
+    css(node, 'transform', 'translateY(' + dy.toFixed(1) + 'px)');
   }
 
   /* объявлены функциями, а не константами: applyLang вызывает update()
@@ -1816,6 +1824,29 @@
     const h = parseFloat(getComputedStyle(document.documentElement)
       .getPropertyValue('--brand-h')) || 72;
     return pad + h + pad * CAT_GAP;
+  }
+
+  /* ---------- запись стиля только при изменении ----------
+     Каждая запись в style помечает узел грязным, и браузер заново
+     считает для него (и его псевдоэлементов) каскад. В кадре прокрутки
+     таких записей набиралось под полсотни, причём большая часть ставила
+     то же самое значение, что и в прошлом кадре: прозрачность единица,
+     pointer-events none, z-index тот же. Пересчёт стилей был самой
+     дорогой строкой в профиле — дороже и скрипта, и раскладки.
+     Теперь рядом с узлом лежит последнее записанное значение, и
+     запись происходит, только когда значение действительно поменялось. */
+  function css(node, prop, val) {
+    const c = node.__css || (node.__css = {});
+    if (c[prop] === val) return;
+    c[prop] = val;
+    node.style[prop] = val;
+  }
+  /** класс переключаем так же — только на смене состояния */
+  function cls(node, name, on) {
+    const c = node.__cls || (node.__cls = {});
+    if (c[name] === on) return;
+    c[name] = on;
+    node.classList.toggle(name, on);
   }
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }

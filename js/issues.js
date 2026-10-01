@@ -97,6 +97,9 @@
       img.src = item.cover;
       img.alt = 'Обложка выпуска ' + pad(item.n) + ': ' + item.title;
       img.loading = i < 4 ? 'eager' : 'lazy';
+      /* декодирование не на главном потоке: иначе первый показ
+         обложки приходился ровно на кадр прокрутки */
+      img.decoding = 'async';
       el.appendChild(img);
       fan.appendChild(el);
       return el;
@@ -113,11 +116,38 @@
       img.src = data[i % data.length].cover;
       img.alt = '';
       img.loading = 'lazy';
+      img.decoding = 'async';
       el.appendChild(img);
       fan.appendChild(el);
       echo.push(el);
     }
     const strip = cards.concat(echo);
+
+    /* ---------- прогрев обложек ----------
+       Дальние обложки помечены loading="lazy": иначе первая же загрузка
+       страницы тянет четыре мегабайта. Но если оставить всё как есть,
+       они приходят ровно тогда, когда до них доезжает веер, — и на
+       телефоне это читалось как «подвисание» и всплывающие по одной
+       картинки. Поэтому, когда страница уже загрузилась и посетитель
+       ещё на первом экране, догружаем остальные по одной, с паузами:
+       к приходу веера они уже в памяти, а загрузку первого экрана это
+       не задерживает. Добавочные карты берут те же файлы, что и первые
+       девять обложек, — отдельно их греть не нужно. */
+    function warmCovers() {
+      let i = 0;
+      const next = () => {
+        while (i < cards.length && cards[i].firstElementChild.complete) i++;
+        if (i >= cards.length) return;
+        const im = cards[i++].firstElementChild;
+        const go = () => setTimeout(next, 80);
+        im.addEventListener('load', go, { once: true });
+        im.addEventListener('error', go, { once: true });
+        im.loading = 'eager';
+      };
+      next();
+    }
+    if (document.readyState === 'complete') setTimeout(warmCovers, 800);
+    else window.addEventListener('load', () => setTimeout(warmCovers, 800), { once: true });
 
 
     const tickEls = data.map((item, i) => {
@@ -201,6 +231,18 @@
       fan.style.setProperty('--ch', ch + 'px');
       fan.style.setProperty('--cwbox', CW + 'px');
       fan.style.setProperty('--chbox', CH + 'px');
+      /* Размер бокса ставим карте напрямую, а не через var() в ширине.
+         Значение с var() браузер подставляет заново на каждом пересчёте
+         стиля карты — то есть каждый кадр и для каждой из двадцати одной.
+         Переменные на вееру остаются: по ним считает раскладку js/main.js
+         и они же работают запасным значением. */
+      const bw = CW + 'px', bh = CH + 'px', nw = cw + 'px', nh = ch + 'px';
+      for (let i = 0; i < cards.length; i++) {
+        css(cards[i], 'width', bw); css(cards[i], 'height', bh);
+      }
+      for (let i = 0; i < echo.length; i++) {
+        css(echo[i], 'width', nw); css(echo[i], 'height', nh);
+      }
     }
 
     /* ---------- цепочка смыкается за фокусной обложкой ----------
@@ -246,6 +288,23 @@
     /** центр дуги для заданного положения верхней кромки веера */
     const arcCentre = topFrac => H * topFrac + ch / 2 + R;
 
+    /* Видна ли карта. Поворот карты учитывается запасом в половину её
+       размера — считать повёрнутый прямоугольник точно здесь ни к чему,
+       а лишняя карта в кадре ничего не стоит. */
+    function onScreen(x, y, w, h) {
+      return x < W + w * 0.5 && x + w > -w * 0.5 &&
+             y < H + h * 0.5 && y + h > -h * 0.5;
+    }
+    /* Пропускаем карту, только если она УЖЕ стояла за кадром и остаётся
+       там же. Последний кадр перед уходом записываем обязательно: иначе
+       карта замирала на экране в прежнем положении, хотя по расчёту
+       давно уехала (так на уходе колоды оставались висеть обложки). */
+    function skip(el, visible) {
+      if (!visible && el.__off) return true;
+      el.__off = !visible;
+      return false;
+    }
+
     /**
      * Точка на дуге для смещения d (в шагах колоды) с общим доворотом spin.
      * Возвращает центр карты и её угол — этим же пользуется маскот,
@@ -273,26 +332,37 @@
     function renderStrip(spin, topFrac) {
       if (!W) measure();
       const cy0 = arcCentre(topFrac);
-      fan.classList.add('is-strip');
+      cls(fan, 'is-strip', true);
       for (let i = 0; i < strip.length; i++) {
         const ang = step * (i - CAT_I) + spin;
         const rad = ang * Math.PI / 180;
         const el = strip[i];
-        const sc = 1 / SC;                   // бокс крупнее — карта ужимается до своего размера
-        el.style.transform =
-          'translate(' + (W / 2 + R * Math.sin(rad) - CW / 2).toFixed(1) + 'px,' +
-          (cy0 - R * Math.cos(rad) - CH / 2).toFixed(1) + 'px) ' +
-          'rotate(' + ang.toFixed(2) + 'deg) scale(' + sc.toFixed(4) + ')';
-        el.style.opacity = '1';
-        el.style.setProperty('--dim', 0.7);
-        el.style.setProperty('--fw', 0);
-        el.classList.remove('is-active');
+        /* У добавочных карт бокс размером с обычную обложку, а не с
+           фокусной: фокусом они не становятся никогда, и крупный слой
+           им не нужен — он только занимал память и время растра. */
+        const big = i < cards.length;
+        const sc = big ? 1 / SC : 1;         // бокс крупнее — карта ужимается до своего размера
+        const hw = big ? CW / 2 : cw / 2, hh = big ? CH / 2 : ch / 2;
+        const x = W / 2 + R * Math.sin(rad) - hw;
+        const y = cy0 - R * Math.cos(rad) - hh;
+        /* Карту, целиком ушедшую за край сцены, в этом кадре не трогаем:
+           каждая запись в style — это пересчёт стиля узла, а в ленте их
+           двадцать одна, и половина всегда за кадром. Когда карта
+           возвращается, положение ей считается заново тем же кадром. */
+        if (skip(el, onScreen(x, y, hw * 2, hh * 2))) { cls(el, 'is-active', false); continue; }
+        css(el, 'transform',
+          'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) ' +
+          'rotate(' + ang.toFixed(2) + 'deg) scale(' + sc.toFixed(4) + ')');
+        css(el, 'opacity', '1');
+        cssVar(el, '--dim', '0.7');
+        cssVar(el, '--fw', '0');
+        cls(el, 'is-active', false);
         /* веер сходится к карте под маскотом: она сверху, остальные
            уходят вглубь в обе стороны — как в бумажной стопке */
         const d = i - CAT_I;
-        el.style.zIndex = 30 - Math.min(29, Math.abs(d));
-        el.style.setProperty('--shx', d < 0 ? -1 : 1);
-        el.classList.toggle('is-crown', d === 0);
+        css(el, 'zIndex', String(30 - Math.min(29, Math.abs(d))));
+        cls(el, 'is-right', d >= 0);
+        cls(el, 'is-crown', d === 0);
       }
       /* активного выпуска в ленте нет: иначе на рисках оставался бы
          aria-selected от последнего показанного номера */
@@ -308,7 +378,7 @@
      */
     function render(pos, spin, topFrac, showActive) {
       if (!W) measure();
-      fan.classList.remove('is-strip');
+      cls(fan, 'is-strip', false);
       const cy0 = arcCentre(topFrac);
       const near = Math.round(clamp(pos, 0, data.length - 1));
       const sc0 = 1 / SC;               // бокс крупнее — обычная карта ужимается
@@ -345,16 +415,19 @@
           }
         }
         const el = cards[i];
-        el.style.transform =
+        /* карту, целиком ушедшую за край сцены, в этом кадре не трогаем —
+           см. пояснение в renderStrip */
+        if (skip(el, isActive || onScreen(x, y, CW, CH))) { cls(el, 'is-active', false); continue; }
+        css(el, 'transform',
           'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) ' +
-          'rotate(' + ang.toFixed(2) + 'deg) scale(' + sc.toFixed(4) + ')';
-        el.style.opacity = '1';
-        el.style.setProperty('--dim', isActive ? 0 : dimFor(Math.abs(d)));
-        el.style.setProperty('--fw', isActive ? 1 : 0);
+          'rotate(' + ang.toFixed(2) + 'deg) scale(' + sc.toFixed(4) + ')');
+        css(el, 'opacity', '1');
+        cssVar(el, '--dim', isActive ? '0' : String(dimFor(Math.abs(d))));
+        cssVar(el, '--fw', isActive ? '1' : '0');
         /* тень падает в ту сторону, где обложка накрывает соседнюю */
-        el.style.setProperty('--shx', d < 0 ? -1 : 1);
-        el.classList.toggle('is-active', isActive);
-        el.style.zIndex = isActive ? 30 : 10 - Math.min(9, Math.round(Math.abs(d)));
+        cls(el, 'is-right', d >= 0);
+        cls(el, 'is-active', isActive);
+        css(el, 'zIndex', String(isActive ? 30 : 10 - Math.min(9, Math.round(Math.abs(d)))));
       }
 
       if (showActive && near !== active) {
@@ -396,8 +469,33 @@
              stripStep: () => step, catIndex: CAT_I };
   }
 
-  const dimFor = d => Math.min(0.82, 0.55 + d * 0.06);
+  /* Вуаль на неактивной обложке. Значение огрубляем до шага 1/64:
+     на глаз разницы нет, а слой карты перестаёт перерисовываться
+     каждый кадр — смена вуали запускает перерисовку всей обложки
+     вместе с тенью, и двенадцать таких перерисовок в кадре были
+     самой дорогой работой на телефоне. */
+  const DIM_STEP = 32;
+  const dimFor = d => Math.round(Math.min(0.82, 0.55 + d * 0.06) * DIM_STEP) / DIM_STEP;
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  /* запись стиля только при изменении — см. тот же приём в js/main.js */
+  function css(node, prop, val) {
+    const c = node.__css || (node.__css = {});
+    if (c[prop] === val) return;
+    c[prop] = val;
+    node.style[prop] = val;
+  }
+  function cssVar(node, prop, val) {
+    const c = node.__css || (node.__css = {});
+    if (c[prop] === val) return;
+    c[prop] = val;
+    node.style.setProperty(prop, val);
+  }
+  function cls(node, name, on) {
+    const c = node.__cls || (node.__cls = {});
+    if (c[name] === on) return;
+    c[name] = on;
+    node.classList.toggle(name, on);
+  }
   const pad = n => String(n).padStart(2, '0');
 
   ns.Issues = { create };

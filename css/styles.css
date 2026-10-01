@@ -64,13 +64,21 @@
   --door-line:     .30;
   --axis-line:     rgba(226,98,47,.34);
 }
-/* на белом тени между обложками читаются слабее — чуть плотнее */
+/* на белом тени между обложками читаются слабее — чуть плотнее.
+   Сторона тени — классом is-right, как и в тёмной теме (см. ниже). */
 :root[data-theme="light"] .issues__fan.is-strip .card{
   box-shadow:
-    calc(var(--shx, -1) *  2px) 0  3px rgba(0,0,0,.34),
-    calc(var(--shx, -1) * 10px) 0 18px rgba(0,0,0,.30),
-    calc(var(--shx, -1) * 26px) 2px 42px rgba(0,0,0,.24),
-    0 -6px 26px rgba(0,0,0,.20);
+     -2px 0  3px rgba(0,0,0,.34),
+    -10px 0 18px rgba(0,0,0,.30),
+    -26px 2px 42px rgba(0,0,0,.24),
+      0 -6px 26px rgba(0,0,0,.20);
+}
+:root[data-theme="light"] .issues__fan.is-strip .card.is-right{
+  box-shadow:
+      2px 0  3px rgba(0,0,0,.34),
+     10px 0 18px rgba(0,0,0,.30),
+     26px 2px 42px rgba(0,0,0,.24),
+      0 -6px 26px rgba(0,0,0,.20);
 }
 :root[data-theme="light"] .issues__fan.is-strip .card.is-crown{
   box-shadow:
@@ -191,6 +199,15 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
 .issues__head, .issue-info, .card{ pointer-events:auto; }
 .scene--outro{ margin-top:-100vh; position:relative; z-index:3; }
 .scene--outro .scene__track{ height:260vh; }
+/* Телефон и планшет: между уходом веера и появлением полки со
+   статистикой оставалось около половины экрана пустой прокрутки — на
+   сенсорном экране один жест проматывает меньше, чем колесо мыши, и
+   пауза читалась как застрявший чёрный экран. Увеличиваем наложение
+   сцен: сама анимация въезда не меняется, она просто начинается
+   раньше. Фаза ухода колоды при этом не тронута. */
+@media (max-width:1279px){
+  .scene--outro{ margin-top:-135vh; }
+}
 
 /* ============ логотип: центр → левый верхний угол ============== */
 
@@ -387,10 +404,19 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
   pointer-events:auto; cursor:pointer;
   opacity:0; will-change:transform,opacity;
 }
+/* Надпись у перехода убрана: остаётся только стрелка.
+
+   Узел при этом сохранён и продолжает занимать прежнее место в потоке —
+   именно его высота задаёт длину оси и положение наконечника. Если
+   просто выбросить текст, блок станет ниже, и на вертикальном экране,
+   где переход привязан верхним краем, стрелка уехала бы вверх.
+   Прозрачность вместо display:none оставляет подпись доступной
+   программам чтения с экрана: ссылка не теряет имени. */
 .hero__cta-text{
   position:relative; z-index:1; display:block;
   font-family:var(--mono); font-size:11.5px; letter-spacing:.2em;
   text-transform:uppercase; color:var(--ink); white-space:nowrap;
+  opacity:0; user-select:none; -webkit-user-select:none;
   transition:color .3s var(--ease);
 }
 /* Слой оси шире самой линии: линия рисуется фоном по центру, а запас
@@ -428,7 +454,6 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
   animation:ctaBob 2.2s var(--ease) infinite;
   pointer-events:none;
 }
-.hero__cta:hover .hero__cta-text{ color:var(--accent); }
 
 /* Подсказка «прокрутите» — единственное, что стоит у нижней кромки в
    самом начале страницы, когда адресная строка ещё РАЗВЁРНУТА. Сцена
@@ -524,18 +549,34 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
 .issues__fan{
   position:absolute; inset:0; z-index:4;
 }
-/* добавочные карты видны только на перелёте */
-.card--echo{ display:none; }
+/* Добавочные карты видны только на перелёте. Бокс у них размером
+   с обычную обложку: фокусом они не становятся, крупный слой им не
+   нужен — он занимал память и время растеризации на ровном месте. */
+.card--echo{ display:none; width:var(--cw); height:var(--ch); }
 .issues__fan.is-strip .card--echo{ display:block; }
-/* лента под маскотом: обложки сходятся к центральной, поэтому тень
-   каждой падает в ту сторону, где она накрывает соседнюю.
-   --shx задаёт направление (−1 слева от центра, +1 справа). */
+/* Лента под маскотом: обложки сходятся к центральной, поэтому тень
+   каждой падает в ту сторону, где она накрывает соседнюю. Сторону
+   задаёт класс is-right (карты правее центра), а по умолчанию тень
+   уходит влево.
+
+   Раньше направление задавалось переменной --shx внутри calc(). Это
+   обходилось дорого: значение с var() браузер подставляет заново при
+   КАЖДОМ пересчёте стиля карты — то есть каждый кадр и для каждой из
+   двадцати одной карты. На постоянных значениях пересчёт стиля в
+   кадре стал примерно на треть дешевле, а растеризация — вдвое. */
 .issues__fan.is-strip .card{
   box-shadow:
-    calc(var(--shx, -1) *  2px) 0  3px rgba(0,0,0,.28),
-    calc(var(--shx, -1) * 10px) 0 18px rgba(0,0,0,.25),
-    calc(var(--shx, -1) * 26px) 2px 42px rgba(0,0,0,.21),
-    0 -6px 26px rgba(0,0,0,.18);
+     -2px 0  3px rgba(0,0,0,.28),
+    -10px 0 18px rgba(0,0,0,.25),
+    -26px 2px 42px rgba(0,0,0,.21),
+      0 -6px 26px rgba(0,0,0,.18);
+}
+.issues__fan.is-strip .card.is-right{
+  box-shadow:
+      2px 0  3px rgba(0,0,0,.28),
+     10px 0 18px rgba(0,0,0,.25),
+     26px 2px 42px rgba(0,0,0,.21),
+      0 -6px 26px rgba(0,0,0,.18);
 }
 /* верхняя карта лежит на обеих соседях — тень в обе стороны */
 .issues__fan.is-strip .card.is-crown{
@@ -546,16 +587,26 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
 }
 /* Раскрытый веер выпусков: у обложек светлый верх, и на белой теме он
    сливался с фоном. Небольшая тень отделяет каждую обложку от фона и от
-   соседней — направление задаёт --shx, как и в ленте под маскотом. */
+   соседней — направление то же, по классу is-right. */
 .issues__fan:not(.is-strip) .card{
   box-shadow:
-    calc(var(--shx, -1) * 2px) 1px  4px rgba(0,0,0,.22),
-    calc(var(--shx, -1) * 8px) 4px 18px rgba(0,0,0,.16);
+    -2px 1px  4px rgba(0,0,0,.22),
+    -8px 4px 18px rgba(0,0,0,.16);
+}
+.issues__fan:not(.is-strip) .card.is-right{
+  box-shadow:
+     2px 1px  4px rgba(0,0,0,.22),
+     8px 4px 18px rgba(0,0,0,.16);
 }
 :root[data-theme="light"] .issues__fan:not(.is-strip) .card{
   box-shadow:
-    calc(var(--shx, -1) * 2px) 1px  4px rgba(0,0,0,.26),
-    calc(var(--shx, -1) * 8px) 4px 18px rgba(0,0,0,.20);
+    -2px 1px  4px rgba(0,0,0,.26),
+    -8px 4px 18px rgba(0,0,0,.20);
+}
+:root[data-theme="light"] .issues__fan:not(.is-strip) .card.is-right{
+  box-shadow:
+     2px 1px  4px rgba(0,0,0,.26),
+     8px 4px 18px rgba(0,0,0,.20);
 }
 .card{
   position:absolute; top:0; left:0;
@@ -568,20 +619,37 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
   will-change:transform,opacity;
 }
 .card img{ width:100%; height:100%; object-fit:cover; }
+/* Вуаль на неактивной обложке.
+
+   Слой вынесен в собственный композиционный слой (will-change):
+   без него смена прозрачности вуали заставляла браузер заново
+   рисовать ВСЮ карту — обложку вместе с тенью, двенадцать раз
+   в кадре. Слой сплошной заливки стоит дёшево, а прозрачность у него
+   меняется уже на стороне композитора, без перерисовки. */
 .card::after{
   content:""; position:absolute; inset:0;
   background:var(--bg);
   opacity:calc(var(--dim, .74) * var(--veil-k, 1));
   transition:opacity .3s var(--ease);
+  will-change:opacity;
 }
 .card.is-active{ z-index:20; }
 /* Активный номер едва заметно подсвечен. Подсветка живёт отдельным
    слоем и переходит от карты к карте вместе с вуалью. */
+/* Подсветка фокусной обложки.
+
+   Слой вынесен в собственный композиционный слой (will-change), как и
+   вуаль. Без этого самый дорогой кусок кадра приходился именно сюда:
+   размытия в 58 и 120 px пересчитывались заново на каждом кадре смены
+   фокуса, и растеризация занимала втрое больше времени, чем вся
+   остальная сцена. Со своим слоем размытие считается один раз, а
+   прозрачность переезжает на композитор. */
 .card::before{
   content:""; position:absolute; inset:0;
   pointer-events:none;
   opacity:var(--fw, 0);
   transition:opacity .3s var(--ease);
+  will-change:opacity;
   /* Тёмная тема: вокруг фокусной обложки — мягкое холодно-белое
      свечение. Два слоя: узкий держит кромку, широкий отделяет
      обложку от почти чёрного фона. Тёплый оранжевый остаётся самым
@@ -1085,6 +1153,29 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
   .door__arrow{ top:10px; font-size:13px; }
   .foot{ padding-top:6px; font-size:9px; }
 }
+
+/* ====== бесконечные анимации идут только в своей сцене ======
+
+   Бегущий блик на двери, покачивание двух стрелок у дверей,
+   наконечник перехода и «дыхание» подсказки крутились всё время —
+   и пока посетитель листал веер, браузер каждый кадр пересчитывал
+   стиль этих узлов и заново записывал отрисовку страницы, хотя сами
+   они были далеко за экраном. В профиле это была примерно треть всех
+   пересчётов стиля в кадре.
+
+   Теперь скрипт отмечает классом ту сцену, что сейчас на экране
+   (js/main.js, в кадре прокрутки), а всё, что вне её, стоит на паузе.
+   Класс висит на самой сцене, а не на корне страницы: так пересчёт
+   при его смене ограничен этой сценой. */
+.hero__hint span,
+.hero__cta::after{ animation-play-state:paused; }
+.scene__pin.sc-on .hero__hint span,
+.scene__pin.sc-on .hero__cta::after{ animation-play-state:running; }
+
+.door__beam,
+.door__arrow{ animation-play-state:paused; }
+.doors.sc-on .door__beam,
+.doors.sc-on .door__arrow{ animation-play-state:running; }
 
 @media (prefers-reduced-motion: reduce){
   .hero__line, .hero__cat, .brand img, .card{ transition:none !important; }
