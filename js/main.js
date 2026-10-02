@@ -1389,7 +1389,16 @@
 
      Включается только на сенсорном экране и только внутри сцены
      выпусков: в первом экране и в закрывающей сцене горизонтальные
-     движения не перехватываются вовсе. */
+     движения не перехватываются вовсе.
+
+     Границы жеста шире, чем «веер стоит на месте»:
+     — начало — тот кадр, когда первая обложка ТОЛЬКО ПОЯВИЛАСЬ из-за
+       кадра и пошла по дуге. Раньше жест здесь ещё не работал, свайп
+       доставался браузеру и читался как прокрутка — веер складывался
+       обратно вправо, хотя палец вёл влево;
+     — конец — конец ухода колоды. Раньше на двенадцатом номере свайп
+       влево упирался в стену, и единственным способом отправить веер
+       за кадр оставалась прокрутка вниз. */
   const SW_EDGE  = 28;    // полоса у края экрана: там у браузера жест «назад»
   const SW_LOCK  = 10;    // сколько пройти пальцем, прежде чем выбрать ось
   const SW_RATIO = 1.3;   // насколько движение должно быть горизонтальнее
@@ -1401,8 +1410,12 @@
   const swSpan = () =>
     clamp(Math.min(window.innerWidth, window.innerHeight) * 0.38, 90, 190);
 
+  /* насколько дальше двенадцатого должен увести палец, чтобы колода
+     ушла совсем, а не вернулась на место */
+  const SW_AWAY = 0.35;
   let swId = null, swX0 = 0, swY0 = 0, swSy = 0, swAxis = 0;
   let swTop = 0, swLen = 0, swK = 0, swVx = 0, swLastX = 0, swLastT = 0;
+  let swLo = 0, swHi = 0;
   /* Слушатель движения пальца обязан быть НЕпассивным — только такой
      может отменить прокрутку браузера. Но непассивный слушатель на окне
      заставляет браузер на КАЖДОМ касании ждать основной поток, прежде
@@ -1426,13 +1439,19 @@
     if (t.clientX < SW_EDGE || t.clientX > window.innerWidth - SW_EDGE) return;
     const vh = viewH();
     const ip = progressAt('issues', vh, window.scrollY);
-    if (ip < IP0() || ip > IP[1]) return;         // сейчас на экране не веер
+    /* от появления первой обложки из-за кадра до конца ухода колоды */
+    if (ip < tr().back[0] || ip > DEPART[1]) return;
     const g = geo.issues;
     swLen = g[1] - vh;
     if (swLen <= 0) return;
     swTop = g[0];
     /* прокрутка, приходящаяся на один выпуск, делённая на ход пальца */
     swK = (swLen * (IP[1] - IP0()) / (ns.issues.length - 1)) / swSpan();
+    /* Назад жест не уводит дальше первого номера. А если он начат ещё
+       на подлёте веера — дальше точки, с которой начат: отматывать
+       дугу возврата назад пальцем незачем. */
+    swLo = Math.min(window.scrollY, swTop + swLen * IP0());
+    swHi = swTop + swLen * DEPART[1];
     swId  = t.identifier;
     swX0  = swLastX = t.clientX;
     swY0  = t.clientY;
@@ -1460,10 +1479,7 @@
     const now = performance.now(), dt = now - swLastT;
     if (dt > 0) swVx = (t.clientX - swLastX) / dt;
     swLastX = t.clientX; swLastT = now;
-    /* за пределы веера жест не выводит: дальше двенадцатого номера
-       начинается уход колоды, и туда уносить пальцем нечего */
-    const lo = swTop + swLen * IP0(), hi = swTop + swLen * IP[1];
-    window.scrollTo(0, Math.round(clamp(swSy - dx * swK, lo, hi)));
+    window.scrollTo(0, Math.round(clamp(swSy - dx * swK, swLo, swHi)));
   }
 
   function swUp() {
@@ -1474,7 +1490,15 @@
     const at = (ip - IP0()) / (IP[1] - IP0()) * n;
     const fling = (performance.now() - swLastT > SW_STALE)
       ? 0 : clamp(-swVx * SW_FLING, -2, 2);
-    jumpToIssue(Math.round(clamp(at + fling, 0, n)));
+    const to = at + fling;
+    /* Увели дальше двенадцатого — доводим колоду до конца, ровно туда
+       же, куда её уводит прокрутка вниз. Иначе доводка возвращала бы
+       веер обратно на двенадцатый, и уйти пальцем было бы нельзя. */
+    if (to > n + SW_AWAY) {
+      window.scrollTo({ top: Math.round(swTop + swLen * DEPART[1]), behavior: 'smooth' });
+      return;
+    }
+    jumpToIssue(Math.round(clamp(to, 0, n)));
   }
 
   if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
