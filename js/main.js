@@ -882,11 +882,28 @@
      резервируем место по самому длинному из двенадцати: иначе линия
      веера прыгала бы при смене номера, а размер фокусной обложки
      подбирался бы по случайно короткому описанию. */
+  /* ---------- выпуски ОБОИХ языков ----------
+     Высота блока выпуска резервируется по самому длинному описанию.
+     Пока она считалась только по текущему языку, раскладка от языка
+     зависела: английские описания короче, блок вставал выше, под веер
+     оставалось больше высоты — и фокусная обложка выходила крупнее
+     русской (на телефонах разница доходила до 17 px, около 7 %).
+     Раскладка от языка зависеть не должна, поэтому меряем по самому
+     длинному описанию из всех, какие есть на странице. */
+  function allIssues() {
+    const out = [];
+    for (const k in ns.text) {
+      const l = ns.text[k] && ns.text[k].issues && ns.text[k].issues();
+      if (l) for (let i = 0; i < l.length; i++) out.push(l[i]);
+    }
+    return out.length ? out : dict().issues();
+  }
+
   function reserveInfo() {
     if (!el.info || !el.title || !el.desc) return;
     el.info.style.minHeight = '';
     if (!isNarrow() && !isLand() && !isFlat()) return;
-    const list = dict().issues();
+    const list = allIssues();
     const bind = window.innerWidth < 1280;
     let max = 0;
     for (let i = 0; i < list.length; i++) {
@@ -933,22 +950,23 @@
   const FLAT_MIN_K   = 0.78;   // предел уменьшения кегля
   let flatRow = 0;             // высота обычной обложки, её ждёт js/issues.js
 
-  /** высота блока выпуска по самому длинному описанию, при текущем кегле */
+  /** высота блока выпуска по самому длинному описанию ОБОИХ языков,
+      при текущем кегле; возвращает и сам этот выпуск */
   function infoTallest() {
-    const list = dict().issues();
+    const list = allIssues();
     const bind = window.innerWidth < 1280;
     const t0 = el.title.textContent, d0 = el.desc.textContent;
-    let max = 0, at = 0;
+    let max = 0, item = list[0];
     for (let i = 0; i < list.length; i++) {
       el.title.textContent = list[i].title;
       el.desc.textContent  = descText(list[i]);
       if (bind) { bindNode(el.title); bindNode(el.desc); }
       const h = el.info.getBoundingClientRect().height;
-      if (h > max) { max = h; at = i; }
+      if (h > max) { max = h; item = list[i]; }
     }
     el.title.textContent = t0; el.desc.textContent = d0;
     if (bind) { bindNode(el.title); bindNode(el.desc); }
-    return { h: max, i: at };
+    return { h: max, item: item };
   }
 
   function fitIssueFlat() {
@@ -968,11 +986,10 @@
     /* текста слишком много — ужимаем кегль, пока цепочка не дорастёт
        до минимального размера */
     if (row < vh * FLAT_ROW_MIN) {
-      const list = dict().issues();
       const t0 = el.title.textContent, d0 = el.desc.textContent;
       const bind = window.innerWidth < 1280;
-      el.title.textContent = list[tall.i].title;
-      el.desc.textContent  = descText(list[tall.i]);
+      el.title.textContent = tall.item.title;
+      el.desc.textContent  = descText(tall.item);
       if (bind) { bindNode(el.title); bindNode(el.desc); }
       for (let k = 0.96; k >= FLAT_MIN_K - 0.001; k -= 0.04) {
         el.info.style.setProperty('--isk', k.toFixed(2));
@@ -1413,6 +1430,8 @@
   /* насколько дальше двенадцатого должен увести палец, чтобы колода
      ушла совсем, а не вернулась на место */
   const SW_AWAY = 0.35;
+  /* запас на округление при проверке границ сцены, в долях трека */
+  const SW_SLACK = 0.004;
   let swId = null, swX0 = 0, swY0 = 0, swSy = 0, swAxis = 0;
   let swTop = 0, swLen = 0, swK = 0, swVx = 0, swLastX = 0, swLastT = 0;
   let swLo = 0, swHi = 0;
@@ -1439,18 +1458,26 @@
     if (t.clientX < SW_EDGE || t.clientX > window.innerWidth - SW_EDGE) return;
     const vh = viewH();
     const ip = progressAt('issues', vh, window.scrollY);
-    /* от появления первой обложки из-за кадра до конца ухода колоды */
-    if (ip < tr().back[0] || ip > DEPART[1]) return;
+    /* Жест живёт ровно между теми же двумя точками, что и ход пальца
+       ниже: от кадра, с которого дуга уносит маскота, до конца ухода
+       колоды. Начинать можно и там, куда жест сам же и привёл, —
+       иначе, отмотав веер назад пальцем, вернуть его пальцем было бы
+       уже нельзя. */
+    /* допуск: доводка жеста приходит ровно на границу, и округление
+       прокрутки до целого пикселя иначе отрезало бы обратный ход */
+    if (ip < tr().carry[0] - SW_SLACK || ip > DEPART[1] + SW_SLACK) return;
     const g = geo.issues;
     swLen = g[1] - vh;
     if (swLen <= 0) return;
     swTop = g[0];
     /* прокрутка, приходящаяся на один выпуск, делённая на ход пальца */
     swK = (swLen * (IP[1] - IP0()) / (ns.issues.length - 1)) / swSpan();
-    /* Назад жест не уводит дальше первого номера. А если он начат ещё
-       на подлёте веера — дальше точки, с которой начат: отматывать
-       дугу возврата назад пальцем незачем. */
-    swLo = Math.min(window.scrollY, swTop + swLen * IP0());
+    /* Пределы хода пальцем — ровно те же две точки, между которыми
+       живёт веер: позади — кадр, с которого дуга начинает уносить
+       маскота (там веера ещё нет и фигура видна целиком), впереди —
+       конец ухода колоды. Так и вперёд, и назад веер уходит пальцем
+       так же, как прокруткой. */
+    swLo = swTop + swLen * tr().carry[0];
     swHi = swTop + swLen * DEPART[1];
     swId  = t.identifier;
     swX0  = swLastX = t.clientX;
@@ -1491,14 +1518,22 @@
     const fling = (performance.now() - swLastT > SW_STALE)
       ? 0 : clamp(-swVx * SW_FLING, -2, 2);
     const to = at + fling;
-    /* Увели дальше двенадцатого — доводим колоду до конца, ровно туда
-       же, куда её уводит прокрутка вниз. Иначе доводка возвращала бы
-       веер обратно на двенадцатый, и уйти пальцем было бы нельзя. */
-    if (to > n + SW_AWAY) {
-      window.scrollTo({ top: Math.round(swTop + swLen * DEPART[1]), behavior: 'smooth' });
-      return;
-    }
+    /* Увели дальше крайнего номера — доводим веер до конца, ровно
+       туда же, куда его уводит прокрутка. Вперёд (за двенадцатым) —
+       колода уходит за кадр; назад (перед первым) — дуга отматывается
+       обратно, и на экране снова маскот. Без этого доводка возвращала
+       бы веер на крайний номер, и уйти пальцем было бы нельзя. */
+    /* Куда вёл палец. Без этого жест, начатый уже ЗА крайним номером
+       и ведущий обратно к вееру, доводился бы туда же, откуда начат:
+       он ведь всё ещё «за краем». */
+    const вспять = swLastX > swX0;
+    if (!вспять && to >  n + SW_AWAY) return swAway(DEPART[1]);
+    if ( вспять && to < -SW_AWAY)     return swAway(tr().carry[0]);
     jumpToIssue(Math.round(clamp(to, 0, n)));
+  }
+  /** довести прокрутку до заданной доли трека выпусков */
+  function swAway(frac) {
+    window.scrollTo({ top: Math.round(swTop + swLen * frac), behavior: 'smooth' });
   }
 
   if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {

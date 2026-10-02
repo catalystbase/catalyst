@@ -598,6 +598,21 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
      2px 1px  4px rgba(0,0,0,.22),
      8px 4px 18px rgba(0,0,0,.16);
 }
+/* У фокусной обложки тень ПРЯМАЯ, без стороны.
+
+   Так она и должна выглядеть: обложка поднята и стоит отдельно над
+   колодой, накрывать ей нечего. Но главное — это снимает рывок.
+   Сторона тени у карты меняется в тот кадр, когда карта проходит
+   середину веера, а середину карта проходит ровно тогда, когда она
+   в фокусе: тень падала влево и вдруг начинала падать вправо. Под
+   прямой тенью эта смена не видна вообще, а на передаче фокуса
+   обложка и так меняет размер и подъём — одно заметное событие
+   вместо двух, и вдвое меньшей величины. */
+.issues__fan:not(.is-strip) .card.is-active{
+  box-shadow:
+    0 1px  4px rgba(0,0,0,.22),
+    0 4px 18px rgba(0,0,0,.16);
+}
 :root[data-theme="light"] .issues__fan:not(.is-strip) .card{
   box-shadow:
     -2px 1px  4px rgba(0,0,0,.26),
@@ -607,6 +622,11 @@ body.has-pointer .cursor-dot{ transform:translate(-50%,-50%) scale(1); }
   box-shadow:
      2px 1px  4px rgba(0,0,0,.26),
      8px 4px 18px rgba(0,0,0,.20);
+}
+:root[data-theme="light"] .issues__fan:not(.is-strip) .card.is-active{
+  box-shadow:
+    0 1px  4px rgba(0,0,0,.26),
+    0 4px 18px rgba(0,0,0,.20);
 }
 .card{
   position:absolute; top:0; left:0;
