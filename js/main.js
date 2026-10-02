@@ -364,7 +364,10 @@
      верхний угол и уменьшается; дальше остаётся там до конца
      страницы (элемент fixed, вне залипающих сцен).            */
   const brandImg = el.brand.querySelector('img');
-  let bx = 0, by = 0, bs = 1;
+  /* cx/cy — куда уводится знак В НАЧАЛЕ страницы, к центру экрана.
+     Конечное положение — угол — задано раскладкой (см. .brand в CSS)
+     и в счёте не участвует вовсе. */
+  let cx = 0, cy = 0, bs = 1;
 
   function measureBrand() {
     const w = brandImg.offsetWidth, h = brandImg.offsetHeight;
@@ -372,19 +375,15 @@
     const pad = parseFloat(getComputedStyle(el.brand).paddingLeft) || 32;
     const target = Math.max(104, Math.min(168, window.innerWidth * 0.10));
     bs = target / w;
-    /* Знак стоит по центру СВОЕГО блока (.brand, position:fixed, inset:0),
-       и уехать он должен ровно в его левый верхний угол, на отступ pad.
-       Поэтому путь считаем по реальному размеру этого блока, а не по
-       окну: на телефоне блок закреплённого элемента выше, чем сцена
-       (адресная строка), и знак останавливался на полвысоты строки ниже
-       положенного — рядом с переключателями, но не на одной линии с
-       ними. На компьютере блок ýже окна на ширину полосы прокрутки,
-       и знак так же смещался относительно текстовой колонки. */
+    /* Отсюда и до центра экрана знак уводится на первом экране.
+       Ошибка в этих числах сдвигает только стартовое положение —
+       в углу знак стоит по раскладке и ни от какого замера не
+       зависит. */
     const box = el.brand.getBoundingClientRect();
     const boxW = box.width  || window.innerWidth;
     const boxH = box.height || viewH();
-    bx = -(boxW / 2 - pad - (w * bs) / 2);
-    by = -(boxH / 2 - pad - (h * bs) / 2);
+    cx = boxW / 2 - w / 2 - pad;
+    cy = boxH / 2 - h / 2 - pad;
     const root = document.documentElement.style;
     root.setProperty('--brand-w', Math.round(target) + 'px');
     root.setProperty('--brand-h', Math.round(h * bs) + 'px');
@@ -1673,9 +1672,13 @@
     const ip = progressAt('issues', vh, sy);
 
     /* ---------------- логотип ---------------- */
+    /* t = 0 — знак в центре экрана, t = 1 — в углу, где он и стоит
+       по раскладке: в конце трансформация обнуляется. Путь и масштаб
+       те же, что и прежде. */
     const t = ease(span(hp, PH.logoOut));
+    const k = 1 - t;
     css(brandImg, 'transform',
-      'translate(' + (bx * t).toFixed(1) + 'px,' + (by * t).toFixed(1) + 'px) ' +
+      'translate(' + (cx * k).toFixed(1) + 'px,' + (cy * k).toFixed(1) + 'px) ' +
       'scale(' + (1 - (1 - bs) * t).toFixed(4) + ')');
 
     /* ------------- передача сцены S3 → S4 -------------
